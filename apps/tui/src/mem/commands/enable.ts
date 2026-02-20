@@ -286,6 +286,8 @@ export async function enableCommand(): Promise<void> {
 		lastIndexedCommit: null,
 		openaiApiKey: apiKey ?? null,
 		createdAt: new Date().toISOString(),
+		embeddingModel: null,
+		localSyncOffsets: {},
 	});
 
 	if (apiKey) {

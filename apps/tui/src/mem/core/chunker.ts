@@ -14,6 +14,7 @@ export interface SolutionChunk {
 	prompt: string;
 	response: string;
 	sessionIndex: number;
+	summary?: string;
 }
 
 const MAX_RESPONSE_LENGTH = 2000;

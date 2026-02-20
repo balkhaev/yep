@@ -1,22 +1,40 @@
 {
-  "name": "tui",
-  "private": true,
+  "name": "yep-mem",
+  "version": "0.1.0",
+  "description": "Persistent memory for AI coding agents — vector search over past sessions",
   "type": "module",
   "module": "src/index.tsx",
+  "bin": {
+    "yep": "./src/index.tsx"
+  },
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "mem": "bun run src/index.tsx"
   },
+  "keywords": [
+    "ai",
+    "memory",
+    "vector-search",
+    "mcp",
+    "coding-agent",
+    "lancedb"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/balkhaev/yep.git",
+    "directory": "apps/tui"
+  },
+  "license": "MIT",
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",
     "@lancedb/lancedb": "^0.16.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@opentui/core": "^0.1.79",
     "@opentui/react": "^0.1.79",
-    "ai": "catalog:",
+    "ai": "^6.0.3",
     "apache-arrow": "^19.0.1",
     "react": "^19.2.4",
-    "zod": "catalog:"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/bun": "latest"

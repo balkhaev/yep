@@ -4,11 +4,21 @@ import { join } from "node:path";
 const MEM_DIR = ".yep-mem";
 const CONFIG_FILE = "config.json";
 
-interface MemConfig {
+export interface MemConfig {
 	createdAt: string;
+	embeddingModel: string | null;
 	lastIndexedCommit: string | null;
+	localSyncOffsets: Record<string, number>;
 	openaiApiKey: string | null;
 }
+
+const DEFAULT_CONFIG: MemConfig = {
+	createdAt: "",
+	embeddingModel: null,
+	lastIndexedCommit: null,
+	localSyncOffsets: {},
+	openaiApiKey: null,
+};
 
 function getMemDir(): string {
 	return join(process.cwd(), MEM_DIR);
@@ -32,9 +42,10 @@ function getConfigPath(): string {
 export function readConfig(): MemConfig {
 	const path = getConfigPath();
 	if (!existsSync(path)) {
-		return { lastIndexedCommit: null, openaiApiKey: null, createdAt: "" };
+		return { ...DEFAULT_CONFIG };
 	}
-	return JSON.parse(readFileSync(path, "utf-8")) as MemConfig;
+	const raw = JSON.parse(readFileSync(path, "utf-8")) as Partial<MemConfig>;
+	return { ...DEFAULT_CONFIG, ...raw };
 }
 
 export function writeConfig(config: MemConfig): void {
@@ -49,6 +60,22 @@ export function updateConfig(partial: Partial<MemConfig>): void {
 
 export function isInitialized(): boolean {
 	return existsSync(getMemDir()) && existsSync(getConfigPath());
+}
+
+export function getLocalSyncOffset(sessionName: string): number {
+	const config = readConfig();
+	return config.localSyncOffsets[sessionName] ?? 0;
+}
+
+export function setLocalSyncOffset(sessionName: string, offset: number): void {
+	const config = readConfig();
+	config.localSyncOffsets[sessionName] = offset;
+	writeConfig(config);
+}
+
+export function getEmbeddingModel(): string {
+	const config = readConfig();
+	return config.embeddingModel ?? "text-embedding-3-small";
 }
 
 function readCursorMcpKey(): string | null {
@@ -72,7 +99,7 @@ function readCursorMcpKey(): string | null {
 				return key;
 			}
 		} catch {
-			// malformed mcp.json, skip
+			// malformed mcp.json
 		}
 	}
 	return null;

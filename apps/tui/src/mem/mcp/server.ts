@@ -7,6 +7,7 @@ import {
 	type SolutionResult,
 	searchSolutions,
 } from "../core/store.ts";
+import { readConfig } from "../lib/config.ts";
 
 function formatSearchResults(
 	results: Array<{ chunk: SolutionResult; score: number }>
@@ -23,10 +24,18 @@ function formatSearchResults(
 				`Checkpoint: ${chunk.checkpointId}`,
 				`Agent: ${chunk.agent}`,
 				chunk.timestamp ? `Time: ${chunk.timestamp}` : null,
+			];
+
+			if (chunk.summary) {
+				lines.push("", `Summary: ${chunk.summary}`);
+			}
+
+			lines.push(
+				"",
 				`Prompt: ${chunk.prompt}`,
 				"",
-				`Response: ${chunk.response}`,
-			];
+				`Response: ${chunk.response}`
+			);
 
 			if (chunk.diffSummary) {
 				lines.push("", `Code changes: ${chunk.diffSummary}`);
@@ -42,11 +51,53 @@ function formatSearchResults(
 		.join("\n\n");
 }
 
+async function buildMemorySummary(): Promise<string> {
+	const config = readConfig();
+	const stats = await getStats();
+
+	const lines = [
+		"# Project Memory Summary",
+		"",
+		`- **Status:** ${stats.hasTable ? "active" : "not initialized"}`,
+		`- **Indexed chunks:** ${stats.totalChunks}`,
+		`- **Created:** ${config.createdAt || "unknown"}`,
+		`- **Embedding model:** ${config.embeddingModel ?? "text-embedding-3-small"}`,
+	];
+
+	if (stats.agents.length > 0) {
+		lines.push(`- **Agents:** ${stats.agents.join(", ")}`);
+	}
+
+	if (stats.topFiles.length > 0) {
+		lines.push("", "## Most Touched Files", "");
+		for (const f of stats.topFiles) {
+			lines.push(`- ${f}`);
+		}
+	}
+
+	lines.push(
+		"",
+		"Use the `search_solutions` tool to find relevant past sessions."
+	);
+
+	return lines.join("\n");
+}
+
 export function createMcpServer(): McpServer {
 	const server = new McpServer({
 		name: "yep-mem",
-		version: "1.0.0",
+		version: "2.0.0",
 	});
+
+	server.resource("memory-summary", "memory://summary", async () => ({
+		contents: [
+			{
+				uri: "memory://summary",
+				mimeType: "text/markdown",
+				text: await buildMemorySummary(),
+			},
+		],
+	}));
 
 	server.tool(
 		"search_solutions",
@@ -73,6 +124,7 @@ export function createMcpServer(): McpServer {
 			const results = await searchSolutions(queryVector, top_k, {
 				agent,
 				files,
+				queryText: query,
 			});
 
 			return {
@@ -92,13 +144,20 @@ export function createMcpServer(): McpServer {
 		{},
 		async () => {
 			const stats = await getStats();
+			const lines = [
+				`Vector store: ${stats.hasTable ? "active" : "not initialized"}`,
+				`Total indexed chunks: ${stats.totalChunks}`,
+			];
+			if (stats.agents.length > 0) {
+				lines.push(`Agents: ${stats.agents.join(", ")}`);
+			}
+			if (stats.topFiles.length > 0) {
+				lines.push(
+					`Most touched files: ${stats.topFiles.slice(0, 5).join(", ")}`
+				);
+			}
 			return {
-				content: [
-					{
-						type: "text" as const,
-						text: `Vector store: ${stats.hasTable ? "active" : "not initialized"}\nTotal indexed chunks: ${stats.totalChunks}`,
-					},
-				],
+				content: [{ type: "text" as const, text: lines.join("\n") }],
 			};
 		}
 	);

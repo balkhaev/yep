@@ -1,7 +1,12 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { getStats } from "../core/store.ts";
-import { isInitialized, readConfig, resolveOpenAIKey } from "../lib/config.ts";
+import {
+	getEmbeddingModel,
+	isInitialized,
+	readConfig,
+	resolveOpenAIKey,
+} from "../lib/config.ts";
 import { checkpointBranchExists } from "../lib/git.ts";
 
 export async function statusCommand(): Promise<void> {
@@ -20,6 +25,7 @@ export async function statusCommand(): Promise<void> {
 
 	const apiKey = resolveOpenAIKey();
 	printRow("OpenAI API key", apiKey ? "configured" : "MISSING");
+	printRow("Embedding model", getEmbeddingModel());
 
 	const entireEnabled = existsSync(join(process.cwd(), ".entire"));
 	printRow("Entire enabled", entireEnabled ? "yes" : "no");
@@ -33,8 +39,18 @@ export async function statusCommand(): Promise<void> {
 	const stats = await getStats();
 	printRow("Vector table", stats.hasTable ? "exists" : "not created");
 	printRow("Indexed chunks", String(stats.totalChunks));
-
 	printRow("Last indexed commit", config.lastIndexedCommit ?? "none");
+
+	if (stats.agents.length > 0) {
+		printRow("Agents", stats.agents.join(", "));
+	}
+
+	if (stats.topFiles.length > 0) {
+		console.log("\n  Most touched files:");
+		for (const f of stats.topFiles.slice(0, 5)) {
+			console.log(`    \x1b[2m-\x1b[0m ${f}`);
+		}
+	}
 
 	console.log("");
 }

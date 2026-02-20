@@ -44,7 +44,7 @@ export async function searchCommand(query: string | undefined): Promise<void> {
 	console.log(`Searching for: "${query}"\n`);
 
 	const queryVector = await embedText(query);
-	const results = await searchSolutions(queryVector, 5);
+	const results = await searchSolutions(queryVector, 5, { queryText: query });
 
 	if (results.length === 0) {
 		console.log("No results found. Run 'yep sync' to index checkpoints.");

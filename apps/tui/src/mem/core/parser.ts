@@ -1,5 +1,6 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { getLocalSyncOffset, setLocalSyncOffset } from "../lib/config.ts";
 import { checkpointBranchExists, getFileAtCommit } from "../lib/git.ts";
 
 const CHECKPOINT_ID_PATTERN = /^([0-9a-f]{2})\/([0-9a-f]{10})\//;
@@ -237,7 +238,34 @@ async function parseCheckpointsFromBranch(
 	return checkpoints;
 }
 
-function parseLocalSessions(knownIds?: Set<string>): ParsedCheckpoint[] {
+function readLocalJsonlIncremental(
+	filePath: string,
+	sessionName: string
+): { transcript: SessionTranscriptEntry[]; newOffset: number } | null {
+	if (!existsSync(filePath)) {
+		return null;
+	}
+
+	const lastOffset = getLocalSyncOffset(sessionName);
+	let stat: ReturnType<typeof statSync>;
+	try {
+		stat = statSync(filePath);
+	} catch {
+		return null;
+	}
+
+	const fileSize = stat.size;
+	if (fileSize <= lastOffset) {
+		return null;
+	}
+
+	const content = readFileSync(filePath, "utf-8");
+	const transcript = parseJsonl(content);
+
+	return { transcript, newOffset: fileSize };
+}
+
+function parseLocalSessions(): ParsedCheckpoint[] {
 	const entireDir = join(process.cwd(), ".entire", "metadata");
 	if (!existsSync(entireDir)) {
 		return [];
@@ -254,23 +282,18 @@ function parseLocalSessions(knownIds?: Set<string>): ParsedCheckpoint[] {
 
 	for (const sessionName of sessionDirs) {
 		const localId = `local-${sessionName}`;
-		if (knownIds?.has(localId)) {
+		const sessionDir = join(entireDir, sessionName);
+		const jsonlPath = join(sessionDir, "full.jsonl");
+
+		const result = readLocalJsonlIncremental(jsonlPath, sessionName);
+		if (!result || result.transcript.length === 0) {
 			continue;
 		}
 
-		const sessionDir = join(entireDir, sessionName);
-		const transcriptRaw = safeReadLocalFile(join(sessionDir, "full.jsonl"));
+		setLocalSyncOffset(sessionName, result.newOffset);
+
 		const promptsRaw = safeReadLocalFile(join(sessionDir, "prompt.txt"));
 		const metaRaw = safeReadLocalFile(join(sessionDir, "metadata.json"));
-
-		if (!transcriptRaw) {
-			continue;
-		}
-
-		const transcript = parseJsonl(transcriptRaw);
-		if (transcript.length === 0) {
-			continue;
-		}
 
 		const metadata: SessionMetadata = metaRaw
 			? (JSON.parse(metaRaw) as SessionMetadata)
@@ -284,7 +307,7 @@ function parseLocalSessions(knownIds?: Set<string>): ParsedCheckpoint[] {
 					checkpointId: localId,
 					sessionIndex: 0,
 					prompts: promptsRaw ?? "",
-					transcript,
+					transcript: result.transcript,
 					metadata,
 				},
 			],
@@ -299,7 +322,7 @@ export async function parseAllCheckpoints(
 ): Promise<ParsedCheckpoint[]> {
 	const [branchCheckpoints, localCheckpoints] = await Promise.all([
 		parseCheckpointsFromBranch(knownIds),
-		Promise.resolve(parseLocalSessions(knownIds)),
+		Promise.resolve(parseLocalSessions()),
 	]);
 
 	return [...branchCheckpoints, ...localCheckpoints];

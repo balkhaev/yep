@@ -15,18 +15,30 @@ fail()  { echo -e "${RED}[fail]${RESET} $*"; exit 1; }
 
 echo -e "\n${BOLD}yep installer${RESET}\n"
 
-# --- Detect repo root ---
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if [ ! -f "$REPO_ROOT/package.json" ]; then
-  fail "Cannot find repo root. Run this script from the yep repository."
-fi
-info "Repo root: $REPO_ROOT"
-
 # --- Check git ---
 if ! command -v git &>/dev/null; then
   fail "git is required. Install it first."
 fi
 done_ "git found"
+
+# --- Detect repo root or clone ---
+YEP_HOME="${YEP_HOME:-$HOME/.yep}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd 2>/dev/null || echo "")"
+CANDIDATE_ROOT="${SCRIPT_DIR:+$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd 2>/dev/null || echo "")}"
+
+if [ -n "$CANDIDATE_ROOT" ] && [ -f "$CANDIDATE_ROOT/package.json" ]; then
+  REPO_ROOT="$CANDIDATE_ROOT"
+else
+  if [ -d "$YEP_HOME/.git" ]; then
+    info "Updating existing installation at $YEP_HOME..."
+    git -C "$YEP_HOME" pull --ff-only
+  else
+    info "Cloning yep into $YEP_HOME..."
+    git clone https://github.com/balkhaev/yep.git "$YEP_HOME"
+  fi
+  REPO_ROOT="$YEP_HOME"
+fi
+info "Repo root: $REPO_ROOT"
 
 # --- Check / install bun ---
 if command -v bun &>/dev/null; then

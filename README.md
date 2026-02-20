@@ -2,9 +2,9 @@
 
 Persistent memory for AI coding agents.
 
-Your agent solves a problem, explains its reasoning, writes the code, and moves on. Next week you hit something similar — and the agent starts from zero. All that context is gone.
+Your agent solves a problem, explains its reasoning, writes the code, and moves on. Next week you hit something similar - and the agent starts from zero. All that context is gone.
 
-yep fixes this. It builds on [Entire](https://entire.io) — a tool that silently records every AI coding session (prompts, responses, tool calls, diffs) and stores them as structured checkpoints in Git. yep takes those checkpoints and turns them into a searchable knowledge base: it parses the transcripts, splits them into semantic chunks, embeds them with OpenAI, and indexes everything into a local [LanceDB](https://lancedb.com) vector store. No server, no cloud — just a directory in your repo.
+yep fixes this. It builds on [Entire](https://entire.io) - a tool that silently records every AI coding session (prompts, responses, tool calls, diffs) and stores them as structured checkpoints in Git. yep takes those checkpoints and turns them into a searchable knowledge base: it parses the transcripts, splits them into semantic chunks, embeds them with OpenAI, and indexes everything into a local [LanceDB](https://lancedb.com) vector store. No server, no cloud - just a directory in your repo.
 
 The loop closes through [MCP](https://modelcontextprotocol.io). Before starting any task, your agent calls `search_solutions` and gets the 5 most relevant past sessions injected into its context. It sees what worked, what was tried, which files were touched. The agent learns from itself.
 
@@ -28,21 +28,11 @@ One install, zero config, fully local. The only external call is to OpenAI for e
 
 ## Getting Started
 
-### 1. Install
-
 ```bash
-./scripts/install.sh
+bunx yep-mem enable
 ```
 
-Checks for `bun` and `entire`, installs dependencies, symlinks the `yep` command to your PATH.
-
-### 2. Enable
-
-```bash
-yep enable
-```
-
-One command does everything:
+Run this inside any project. It does everything:
 
 - Creates `.yep-mem/` with a LanceDB vector store
 - Runs `entire enable` to start capturing sessions
@@ -50,9 +40,9 @@ One command does everything:
 - Registers the MCP server in `.cursor/mcp.json`
 - Syncs existing checkpoints if any are found
 
-### 3. Set Your API Key
+### API Key
 
-OpenAI API key is required for embeddings. Resolved from three sources in order:
+OpenAI API key is required for embeddings. Resolved in order:
 
 1. `OPENAI_API_KEY` environment variable
 2. `.yep-mem/config.json` field `openaiApiKey`
@@ -76,7 +66,7 @@ The `.cursor/mcp.json` file is gitignored — each developer keeps their own key
 
 Agents in Cursor (or any MCP-compatible client) get two tools:
 
-**`search_solutions`** — find relevant past sessions before starting work.
+**`search_solutions`** - find relevant past sessions before starting work.
 
 ```text
 query       string       What you're trying to solve
@@ -85,18 +75,18 @@ agent       string?      Filter by agent type
 files       string[]?    Filter by files involved
 ```
 
-**`mem_stats`** — check vector store health and indexed chunk count.
+**`mem_stats`** - check vector store health and indexed chunk count.
 
 The server starts automatically when Cursor reads `.cursor/mcp.json`. For manual use: `yep serve`.
 
 ## Built With
 
-- **[LanceDB](https://lancedb.com)** — embedded vector DB, no server, HNSW index
-- **[AI SDK](https://ai-sdk.dev)** — OpenAI `text-embedding-3-small` embeddings
-- **[Entire](https://entire.io)** — session capture as Git checkpoints
-- **[MCP](https://modelcontextprotocol.io)** — stdio transport for agent integration
-- **[Lefthook](https://github.com/evilmartians/lefthook)** — post-commit auto-sync
-- **[Bun](https://bun.sh)** — runtime
+- **[LanceDB](https://lancedb.com)** - embedded vector DB, no server, HNSW index
+- **[AI SDK](https://ai-sdk.dev)** - OpenAI `text-embedding-3-small` embeddings
+- **[Entire](https://entire.io)** - session capture as Git checkpoints
+- **[MCP](https://modelcontextprotocol.io)** - stdio transport for agent integration
+- **[Lefthook](https://github.com/evilmartians/lefthook)** - post-commit auto-sync
+- **[Bun](https://bun.sh)** - runtime
 
 ---
 

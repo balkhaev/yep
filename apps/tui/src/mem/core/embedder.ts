@@ -1,12 +1,17 @@
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
+import { getEmbeddingModel } from "../lib/config.ts";
 
-const EMBEDDING_MODEL = openai.embeddingModel("text-embedding-3-small");
 const MAX_RETRIES = 3;
+
+function resolveModel() {
+	const modelName = getEmbeddingModel();
+	return openai.embeddingModel(modelName);
+}
 
 export async function embedText(text: string): Promise<number[]> {
 	const { embedding } = await embed({
-		model: EMBEDDING_MODEL,
+		model: resolveModel(),
 		value: text,
 		maxRetries: MAX_RETRIES,
 	});
@@ -22,7 +27,7 @@ export async function embedTexts(
 	progress?: EmbedProgress
 ): Promise<number[][]> {
 	const { embeddings } = await embedMany({
-		model: EMBEDDING_MODEL,
+		model: resolveModel(),
 		values: texts,
 		maxRetries: MAX_RETRIES,
 	});
