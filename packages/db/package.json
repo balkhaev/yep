@@ -1,0 +1,31 @@
+{
+  "name": "@yep/db",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {
+    "db:local": "turso dev --db-file local.db",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/adapter-libsql": "^7.2.0",
+    "@prisma/client": "^7.2.0",
+    "@yep/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@yep/config": "workspace:*",
+    "prisma": "^7.2.0",
+    "typescript": "catalog:"
+  }
+}

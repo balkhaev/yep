@@ -1,0 +1,27 @@
+{
+  "name": "tui",
+  "private": true,
+  "type": "module",
+  "module": "src/index.tsx",
+  "scripts": {
+    "dev": "bun run --watch src/index.tsx",
+    "mem": "bun run src/index.tsx"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.0",
+    "@lancedb/lancedb": "^0.16.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@opentui/core": "^0.1.79",
+    "@opentui/react": "^0.1.79",
+    "ai": "catalog:",
+    "apache-arrow": "^19.0.1",
+    "react": "^19.2.4",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

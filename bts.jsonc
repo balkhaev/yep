@@ -1,0 +1,31 @@
+// Better-T-Stack
+//
+// Website: https://www.better-t-stack.dev/
+// Stack Builder: https://www.better-t-stack.dev/new
+// Analytics: https://www.better-t-stack.dev/analytics
+// Showcase: https://www.better-t-stack.dev/showcase
+// Sponsor: https://github.com/sponsors/AmanVarshney01
+//
+// Add new addons with: bun create better-t-stack add
+// This file is safe to delete
+
+{
+  "$schema": "https://r2.better-t-stack.dev/schema.json",
+  "version": "3.21.1",
+  "createdAt": "2026-02-20T11:52:39.044Z",
+  "reproducibleCommand": "bun create better-t-stack@latest yep --frontend native-uniwind --backend hono --runtime bun --database sqlite --orm prisma --api none --auth none --payments none --addons turborepo biome ultracite lefthook opentui --examples ai --db-setup none --web-deploy none --server-deploy none --git --package-manager bun --install",
+  "database": "sqlite",
+  "orm": "prisma",
+  "backend": "hono",
+  "runtime": "bun",
+  "frontend": ["native-uniwind"],
+  "addons": ["turborepo", "biome", "ultracite", "lefthook", "opentui"],
+  "examples": ["ai"],
+  "auth": "none",
+  "payments": "none",
+  "packageManager": "bun",
+  "dbSetup": "none",
+  "api": "none",
+  "webDeploy": "none",
+  "serverDeploy": "none",
+}
