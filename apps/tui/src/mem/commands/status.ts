@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { getStats } from "../core/store.ts";
 import {
 	getEmbeddingModel,
+	getSummarizerModel,
 	isInitialized,
 	readConfig,
 	resolveOpenAIKey,
@@ -22,10 +23,16 @@ export async function statusCommand(): Promise<void> {
 
 	const config = readConfig();
 	printRow("Created", config.createdAt || "unknown");
-
-	const apiKey = resolveOpenAIKey();
-	printRow("OpenAI API key", apiKey ? "configured" : "MISSING");
+	printRow("Provider", config.provider);
 	printRow("Embedding model", getEmbeddingModel());
+	printRow("Summarizer model", getSummarizerModel());
+
+	if (config.provider === "openai") {
+		const apiKey = resolveOpenAIKey();
+		printRow("OpenAI API key", apiKey ? "configured" : "MISSING");
+	} else {
+		printRow("Ollama URL", config.ollamaBaseUrl ?? "localhost:11434");
+	}
 
 	const entireEnabled = existsSync(join(process.cwd(), ".entire"));
 	printRow("Entire enabled", entireEnabled ? "yes" : "no");

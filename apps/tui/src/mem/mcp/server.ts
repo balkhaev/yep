@@ -9,7 +9,7 @@ import {
 } from "../core/store.ts";
 import { readConfig } from "../lib/config.ts";
 
-function formatSearchResults(
+function formatCompactResults(
 	results: Array<{ chunk: SolutionResult; score: number }>
 ): string {
 	if (results.length === 0) {
@@ -20,6 +20,36 @@ function formatSearchResults(
 		.map((r, i) => {
 			const { chunk, score } = r;
 			const lines = [
+				`--- Past Solution ${i + 1} (relevance: ${score.toFixed(2)}) ---`,
+			];
+
+			if (chunk.summary) {
+				lines.push(`Summary: ${chunk.summary}`);
+			} else {
+				lines.push(`Prompt: ${chunk.prompt.slice(0, 200)}`);
+			}
+
+			if (chunk.filesChanged) {
+				lines.push(`Files: ${chunk.filesChanged}`);
+			}
+
+			lines.push("---");
+			return lines.join("\n");
+		})
+		.join("\n\n");
+}
+
+function formatFullResults(
+	results: Array<{ chunk: SolutionResult; score: number }>
+): string {
+	if (results.length === 0) {
+		return "No relevant past solutions found. The vector store may be empty — run `yep sync` to index checkpoints.";
+	}
+
+	return results
+		.map((r, i) => {
+			const { chunk, score } = r;
+			const lines: (string | null)[] = [
 				`--- Past Solution ${i + 1} (relevance: ${score.toFixed(2)}) ---`,
 				`Checkpoint: ${chunk.checkpointId}`,
 				`Agent: ${chunk.agent}`,
@@ -59,9 +89,10 @@ async function buildMemorySummary(): Promise<string> {
 		"# Project Memory Summary",
 		"",
 		`- **Status:** ${stats.hasTable ? "active" : "not initialized"}`,
+		`- **Provider:** ${config.provider}`,
 		`- **Indexed chunks:** ${stats.totalChunks}`,
 		`- **Created:** ${config.createdAt || "unknown"}`,
-		`- **Embedding model:** ${config.embeddingModel ?? "text-embedding-3-small"}`,
+		`- **Embedding model:** ${config.embeddingModel ?? "auto"}`,
 	];
 
 	if (stats.agents.length > 0) {
@@ -70,7 +101,7 @@ async function buildMemorySummary(): Promise<string> {
 
 	if (stats.topFiles.length > 0) {
 		lines.push("", "## Most Touched Files", "");
-		for (const f of stats.topFiles) {
+		for (const f of stats.topFiles.slice(0, 5)) {
 			lines.push(`- ${f}`);
 		}
 	}
@@ -101,15 +132,27 @@ export function createMcpServer(): McpServer {
 
 	server.tool(
 		"search_solutions",
-		"Search past AI coding sessions for relevant solutions. Use before starting a task to get context from similar past work.",
+		"Search past AI coding sessions for relevant solutions. Use before starting a task to get context from similar past work. Returns compact summaries by default to save context tokens.",
 		{
 			query: z.string().describe("What you're trying to solve or implement"),
 			top_k: z
 				.number()
 				.min(1)
 				.max(20)
-				.default(5)
+				.default(3)
 				.describe("Number of results to return"),
+			compact: z
+				.boolean()
+				.default(true)
+				.describe(
+					"Return compact summaries (true) or full prompt/response (false)"
+				),
+			min_score: z
+				.number()
+				.min(0)
+				.max(1)
+				.default(0.3)
+				.describe("Minimum relevance score threshold (0-1)"),
 			agent: z
 				.string()
 				.optional()
@@ -119,19 +162,21 @@ export function createMcpServer(): McpServer {
 				.optional()
 				.describe("Filter by files involved (partial match on file paths)"),
 		},
-		async ({ query, top_k, agent, files }) => {
+		async ({ query, top_k, compact, min_score, agent, files }) => {
 			const queryVector = await embedText(query);
 			const results = await searchSolutions(queryVector, top_k, {
 				agent,
 				files,
 				queryText: query,
+				minScore: min_score,
 			});
 
+			const format = compact ? formatCompactResults : formatFullResults;
 			return {
 				content: [
 					{
 						type: "text" as const,
-						text: formatSearchResults(results),
+						text: format(results),
 					},
 				],
 			};

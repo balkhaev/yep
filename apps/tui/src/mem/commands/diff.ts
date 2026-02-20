@@ -1,5 +1,13 @@
 import { searchByFile } from "../core/store.ts";
-import { isInitialized } from "../lib/config.ts";
+import { requireInit } from "../lib/guards.ts";
+
+function clean(raw: string, maxLen = 100): string {
+	return raw
+		.replace(/<[^>]+>/g, "")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, maxLen);
+}
 
 export async function diffCommand(file: string | undefined): Promise<void> {
 	if (!file) {
@@ -7,10 +15,7 @@ export async function diffCommand(file: string | undefined): Promise<void> {
 		process.exit(1);
 	}
 
-	if (!isInitialized()) {
-		console.error("Not initialized. Run 'yep enable' first.");
-		process.exit(1);
-	}
+	requireInit();
 
 	const results = await searchByFile(file);
 
@@ -40,7 +45,7 @@ export async function diffCommand(file: string | undefined): Promise<void> {
 			: "unknown";
 
 		const agent = result.agent !== "unknown" ? ` (${result.agent})` : "";
-		const summary = result.summary || result.prompt.slice(0, 120);
+		const summary = clean(result.summary || result.prompt);
 
 		console.log(
 			`  \x1b[2m${String(i + 1).padStart(2)}.\x1b[0m \x1b[36m${time}\x1b[0m${agent}`
@@ -48,8 +53,7 @@ export async function diffCommand(file: string | undefined): Promise<void> {
 		console.log(`      ${summary}`);
 
 		if (result.diffSummary) {
-			const diffPreview = result.diffSummary.slice(0, 100).replace(/\n/g, " ");
-			console.log(`      \x1b[2m${diffPreview}\x1b[0m`);
+			console.log(`      \x1b[2m${clean(result.diffSummary)}\x1b[0m`);
 		}
 
 		console.log("");

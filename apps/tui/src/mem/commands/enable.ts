@@ -4,6 +4,7 @@ import { initStore } from "../core/store.ts";
 import {
 	ensureMemDir,
 	isInitialized,
+	type ProviderType,
 	resolveOpenAIKey,
 	writeConfig,
 } from "../lib/config.ts";
@@ -260,6 +261,27 @@ function printSummary(): void {
 	console.log("");
 }
 
+function detectProvider(): ProviderType {
+	const envProvider = process.env.YEP_PROVIDER;
+	if (envProvider === "ollama") {
+		return "ollama";
+	}
+	if (envProvider === "openai") {
+		return "openai";
+	}
+
+	if (resolveOpenAIKey()) {
+		return "openai";
+	}
+
+	const { exitCode } = Bun.spawnSync(["sh", "-c", "ollama list 2>/dev/null"]);
+	if (exitCode === 0) {
+		return "ollama";
+	}
+
+	return "openai";
+}
+
 export async function enableCommand(): Promise<void> {
 	console.log("");
 	console.log(
@@ -281,21 +303,33 @@ export async function enableCommand(): Promise<void> {
 	setupLefthook(repoRoot);
 	setupCursorMcp(repoRoot);
 
-	const apiKey = resolveOpenAIKey();
+	const provider = detectProvider();
+	const apiKey = provider === "openai" ? resolveOpenAIKey() : null;
+
 	writeConfig({
 		lastIndexedCommit: null,
 		openaiApiKey: apiKey ?? null,
 		createdAt: new Date().toISOString(),
 		embeddingModel: null,
 		localSyncOffsets: {},
+		ollamaBaseUrl: null,
+		provider,
+		summarizerModel: null,
 	});
 
-	if (apiKey) {
+	if (provider === "ollama") {
+		ok("Using Ollama (local models, no API key needed)");
+		hint("Embedding: nomic-embed-text | Summarizer: llama3.1:8b");
+		hint("Make sure Ollama is running: ollama serve");
+	} else if (apiKey) {
 		ok("OpenAI API key found");
 		process.env.OPENAI_API_KEY = apiKey;
 	} else {
 		warning("OPENAI_API_KEY not set");
 		hint("Add it to .cursor/mcp.json or export before sync");
+		hint(
+			"Or switch to local models: set provider to 'ollama' in .yep-mem/config.json"
+		);
 	}
 
 	if (entire.ready && apiKey && (await checkpointBranchExists())) {

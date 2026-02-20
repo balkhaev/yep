@@ -42,7 +42,6 @@ export default function AIScreen() {
 			fetch: expoFetch as unknown as typeof globalThis.fetch,
 			api: generateAPIUrl("/ai"),
 		}),
-		onError: (error) => console.error(error, "AI Chat Error"),
 	});
 	const scrollViewRef = useRef<ScrollView>(null);
 	const foregroundColor = useThemeColor("foreground");

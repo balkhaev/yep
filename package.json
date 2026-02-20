@@ -20,7 +20,6 @@
     "build": "turbo build",
     "check-types": "turbo check-types",
     "dev:native": "turbo -F native dev",
-    "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
     "db:push": "turbo -F @yep/db db:push",
     "db:studio": "turbo -F @yep/db db:studio",

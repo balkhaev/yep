@@ -1,16 +1,13 @@
 import { existsSync, watch } from "node:fs";
 import { join } from "node:path";
-import { isInitialized } from "../lib/config.ts";
+import { requireInit } from "../lib/guards.ts";
 import { syncCommand } from "./sync.ts";
 
 const DEBOUNCE_MS = 10_000;
 const MIN_INTERVAL_MS = 30_000;
 
 export async function watchCommand(): Promise<void> {
-	if (!isInitialized()) {
-		console.error("Not initialized. Run 'yep enable' first.");
-		process.exit(1);
-	}
+	requireInit();
 
 	const metadataDir = join(process.cwd(), ".entire", "metadata");
 	if (!existsSync(metadataDir)) {

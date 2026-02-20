@@ -1,6 +1,7 @@
 import { embedText } from "../core/embedder.ts";
 import { type SolutionResult, searchSolutions } from "../core/store.ts";
-import { ensureOpenAIKey, isInitialized } from "../lib/config.ts";
+import { ensureProviderReady } from "../lib/config.ts";
+import { requireInit } from "../lib/guards.ts";
 
 function formatResult(
 	index: number,
@@ -34,12 +35,8 @@ export async function searchCommand(query: string | undefined): Promise<void> {
 		process.exit(1);
 	}
 
-	if (!isInitialized()) {
-		console.error("Not initialized. Run 'yep enable' first.");
-		process.exit(1);
-	}
-
-	ensureOpenAIKey();
+	requireInit();
+	ensureProviderReady();
 
 	console.log(`Searching for: "${query}"\n`);
 

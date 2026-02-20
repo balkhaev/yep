@@ -64,12 +64,20 @@ switch (command) {
 	case "help":
 		printHelp();
 		break;
-	default:
+	default: {
 		if (command) {
 			console.error(`Unknown command: ${command}\n`);
 			printHelp();
 			process.exit(1);
 		}
-		await renderTuiApp();
+		const action = await renderTuiApp();
+		if (action === "sync") {
+			await syncCommand();
+		} else if (action === "watch") {
+			await watchCommand();
+		} else if (action === "reset") {
+			await resetCommand({ reindex: process.argv.includes("--reindex") });
+		}
 		break;
+	}
 }

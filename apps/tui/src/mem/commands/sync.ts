@@ -13,11 +13,11 @@ import {
 } from "../core/store.ts";
 import { summarizeChunks } from "../core/summarizer.ts";
 import {
-	ensureOpenAIKey,
-	isInitialized,
+	ensureProviderReady,
 	readConfig,
 	updateConfig,
 } from "../lib/config.ts";
+import { requireInit } from "../lib/guards.ts";
 
 function hashContent(content: string): string {
 	return createHash("sha256").update(content).digest("hex").slice(0, 16);
@@ -108,12 +108,8 @@ async function indexChunks(
 }
 
 export async function syncCommand(): Promise<void> {
-	if (!isInitialized()) {
-		console.error("Not initialized. Run 'yep enable' first.");
-		process.exit(1);
-	}
-
-	ensureOpenAIKey();
+	requireInit();
+	ensureProviderReady();
 	console.log("Syncing checkpoints...\n");
 
 	const existingIds = await getIndexedChunkIds();

@@ -1,8 +1,28 @@
 import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
+import { createOllama } from "ollama-ai-provider-v2";
+import {
+	getOllamaBaseUrl,
+	getProvider,
+	getSummarizerModel,
+} from "../lib/config.ts";
 
-const SUMMARIZER_MODEL = openai("gpt-4o-mini");
 const MAX_INPUT_LENGTH = 6000;
+
+const SYSTEM_PROMPT =
+	"Summarize this AI coding session in 2-3 sentences. Focus on: what problem was solved, what approach was taken, and what files/technologies were involved. Be specific and concise. Output only the summary, no preamble.";
+
+function resolveModel() {
+	const provider = getProvider();
+	const modelName = getSummarizerModel();
+
+	if (provider === "ollama") {
+		const ollamaProvider = createOllama({ baseURL: getOllamaBaseUrl() });
+		return ollamaProvider(modelName);
+	}
+
+	return openai(modelName);
+}
 
 function truncateForSummary(text: string): string {
 	return text.length > MAX_INPUT_LENGTH
@@ -25,11 +45,10 @@ export async function summarizeChunk(
 
 	try {
 		const { text } = await generateText({
-			model: SUMMARIZER_MODEL,
+			model: resolveModel(),
 			maxOutputTokens: 200,
 			temperature: 0,
-			system:
-				"Summarize this AI coding session in 2-3 sentences. Focus on: what problem was solved, what approach was taken, and what files/technologies were involved. Be specific and concise. Output only the summary, no preamble.",
+			system: SYSTEM_PROMPT,
 			prompt: input,
 		});
 		return text.trim();
@@ -62,10 +81,11 @@ export async function summarizeChunks(
 	onProgress?: (completed: number, total: number) => void
 ): Promise<string[]> {
 	const summaries: string[] = [];
-	const PARALLEL = 5;
+	const provider = getProvider();
+	const parallel = provider === "ollama" ? 2 : 5;
 
-	for (let i = 0; i < chunks.length; i += PARALLEL) {
-		const batch = chunks.slice(i, i + PARALLEL);
+	for (let i = 0; i < chunks.length; i += parallel) {
+		const batch = chunks.slice(i, i + parallel);
 		const results = await Promise.all(
 			batch.map((c) => summarizeChunk(c.prompt, c.response, c.diffSummary))
 		);

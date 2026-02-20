@@ -1,14 +1,12 @@
 import { dropTable, initStore } from "../core/store.ts";
-import { isInitialized, updateConfig } from "../lib/config.ts";
+import { updateConfig } from "../lib/config.ts";
+import { requireInit } from "../lib/guards.ts";
 import { syncCommand } from "./sync.ts";
 
 export async function resetCommand(
 	flags: { reindex?: boolean } = {}
 ): Promise<void> {
-	if (!isInitialized()) {
-		console.error("Not initialized. Run 'yep enable' first.");
-		process.exit(1);
-	}
+	requireInit();
 
 	console.log("[info] Dropping vector store...");
 	const dropped = await dropTable();

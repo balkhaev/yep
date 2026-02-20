@@ -1,9 +1,8 @@
 import { type Connection, connect, Index, type Table } from "@lancedb/lancedb";
-import { getStorePath } from "../lib/config.ts";
+import { getStorePath, getVectorDimensions } from "../lib/config.ts";
 import type { SolutionChunk } from "./chunker.ts";
 
 const TABLE_NAME = "solutions";
-const VECTOR_DIMS = 1536;
 
 interface VectorRecord {
 	agent: string;
@@ -52,9 +51,16 @@ async function getConnection(): Promise<Connection> {
 	return cachedConnection;
 }
 
+let migrated = false;
+
 async function getTable(): Promise<Table> {
 	const conn = await getConnection();
-	return conn.openTable(TABLE_NAME);
+	const table = await conn.openTable(TABLE_NAME);
+	if (!migrated) {
+		await migrateSchema(table);
+		migrated = true;
+	}
+	return table;
 }
 
 async function tableExists(): Promise<boolean> {
@@ -101,13 +107,33 @@ function emptyRecord(): VectorRecord {
 		tokensUsed: 0,
 		embeddingText: "",
 		contentHash: "",
-		vector: new Array(VECTOR_DIMS).fill(0) as number[],
+		vector: new Array(getVectorDimensions()).fill(0) as number[],
 	};
+}
+
+async function migrateSchema(table: Table): Promise<void> {
+	const schema = await table.schema();
+	const existingFields = new Set(schema.fields.map((f) => f.name));
+	const missing: { name: string; valueSql: string }[] = [];
+	if (!existingFields.has("summary")) {
+		missing.push({ name: "summary", valueSql: "''" });
+	}
+	if (!existingFields.has("contentHash")) {
+		missing.push({ name: "contentHash", valueSql: "''" });
+	}
+	if (!existingFields.has("embeddingText")) {
+		missing.push({ name: "embeddingText", valueSql: "''" });
+	}
+	if (missing.length > 0) {
+		await table.addColumns(missing);
+	}
 }
 
 export async function initStore(): Promise<void> {
 	const conn = await getConnection();
 	if (await tableExists()) {
+		const table = await getTable();
+		await migrateSchema(table);
 		return;
 	}
 
@@ -179,7 +205,7 @@ export async function upsertChunks(
 	const checkpointIds = new Set(chunks.map((c) => c.checkpointId));
 	for (const cpId of checkpointIds) {
 		try {
-			await table.delete(`checkpointId = '${escapeSql(cpId)}'`);
+			await table.delete(`"checkpointId" = '${escapeSql(cpId)}'`);
 		} catch {
 			// table may be empty
 		}
@@ -198,8 +224,10 @@ export async function upsertChunks(
 	return records.length;
 }
 
+type RankedRow = Record<string, unknown> & { _rrfScore?: number };
+
 function escapeSql(value: string): string {
-	return value.replace(/'/g, "''");
+	return value.replace(/\\/g, "\\\\").replace(/'/g, "''").replace(/\0/g, "");
 }
 
 function rowToResult(row: Record<string, unknown>): SolutionResult {
@@ -268,8 +296,13 @@ function deduplicateResults(
 
 export async function searchSolutions(
 	queryVector: number[],
-	topK = 5,
-	filter?: { agent?: string; files?: string[]; queryText?: string }
+	topK = 3,
+	filter?: {
+		agent?: string;
+		files?: string[];
+		queryText?: string;
+		minScore?: number;
+	}
 ): Promise<SearchResult[]> {
 	if (!(await tableExists())) {
 		return [];
@@ -284,7 +317,7 @@ export async function searchSolutions(
 	}
 	if (filter?.files && filter.files.length > 0) {
 		const fileConditions = filter.files
-			.map((f) => `filesChanged LIKE '%${escapeSql(f)}%'`)
+			.map((f) => `"filesChanged" LIKE '%${escapeSql(f)}%'`)
 			.join(" OR ");
 		const fileWhere = `(${fileConditions})`;
 		whereClause = whereClause ? `${whereClause} AND ${fileWhere}` : fileWhere;
@@ -297,7 +330,7 @@ export async function searchSolutions(
 		whereClause
 	);
 
-	let results: Record<string, unknown>[];
+	let results: RankedRow[];
 	if (filter?.queryText) {
 		const ftsResults = await ftsSearch(
 			table,
@@ -307,18 +340,28 @@ export async function searchSolutions(
 		);
 		results = mergeWithRRF(vectorResults, ftsResults, fetchK);
 	} else {
-		results = vectorResults;
+		results = vectorResults.map((row) => ({
+			...row,
+			_rrfScore: row._distance != null ? 1 - (row._distance as number) : 0,
+		}));
 	}
 
 	const searchResults: SearchResult[] = results.map((row) => ({
 		chunk: rowToResult(row),
-		score: row._distance != null ? 1 - (row._distance as number) : 0,
+		score:
+			row._rrfScore ??
+			(row._distance != null ? 1 - (row._distance as number) : 0),
 	}));
 
 	const resultVectors = results.map((row) => (row.vector as number[]) ?? []);
 
 	const deduped = deduplicateResults(searchResults, resultVectors);
-	return deduped.slice(0, topK);
+
+	const minScore = filter?.minScore ?? 0;
+	const filtered =
+		minScore > 0 ? deduped.filter((r) => r.score >= minScore) : deduped;
+
+	return filtered.slice(0, topK);
 }
 
 async function vectorOnlySearch(
@@ -357,7 +400,7 @@ function mergeWithRRF(
 	vectorResults: Record<string, unknown>[],
 	ftsResults: Record<string, unknown>[],
 	limit: number
-): Record<string, unknown>[] {
+): RankedRow[] {
 	const scores = new Map<
 		string,
 		{ score: number; row: Record<string, unknown> }
@@ -384,8 +427,23 @@ function mergeWithRRF(
 	return [...scores.values()]
 		.sort((a, b) => b.score - a.score)
 		.slice(0, limit)
-		.map((e) => e.row);
+		.map((e) => ({ ...e.row, _rrfScore: e.score }));
 }
+
+const RESULT_COLUMNS = [
+	"id",
+	"checkpointId",
+	"sessionIndex",
+	"prompt",
+	"response",
+	"diffSummary",
+	"summary",
+	"agent",
+	"timestamp",
+	"filesChanged",
+	"tokensUsed",
+	"embeddingText",
+];
 
 export async function searchByFile(
 	file: string,
@@ -396,13 +454,17 @@ export async function searchByFile(
 	}
 
 	const table = await getTable();
-	const rows = await table
-		.query()
-		.where(`filesChanged LIKE '%${escapeSql(file)}%'`)
-		.limit(limit)
-		.toArray();
+	const rows = await table.query().select(RESULT_COLUMNS).limit(500).toArray();
 
-	return rows.map((row) => rowToResult(row as Record<string, unknown>));
+	const needle = file.toLowerCase();
+	const matched = rows.filter((row) => {
+		const files = String(row.filesChanged ?? "").toLowerCase();
+		return files.includes(needle);
+	});
+
+	return matched
+		.slice(0, limit)
+		.map((row) => rowToResult(row as Record<string, unknown>));
 }
 
 export async function getIndexedChunkIds(): Promise<Set<string>> {
@@ -425,7 +487,7 @@ export async function getContentHash(
 	const table = await getTable();
 	const rows = await table
 		.query()
-		.where(`checkpointId = '${escapeSql(checkpointId)}'`)
+		.where(`"checkpointId" = '${escapeSql(checkpointId)}'`)
 		.select(["contentHash"])
 		.limit(1)
 		.toArray();

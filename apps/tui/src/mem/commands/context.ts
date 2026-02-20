@@ -1,6 +1,7 @@
 import { embedText } from "../core/embedder.ts";
 import { type SolutionResult, searchSolutions } from "../core/store.ts";
-import { ensureOpenAIKey, isInitialized } from "../lib/config.ts";
+import { ensureProviderReady } from "../lib/config.ts";
+import { requireInit } from "../lib/guards.ts";
 
 function formatForContext(
 	results: Array<{ chunk: SolutionResult; score: number }>
@@ -52,14 +53,8 @@ export async function contextCommand(query: string | undefined): Promise<void> {
 		process.exit(1);
 	}
 
-	if (!isInitialized()) {
-		process.exit(0);
-	}
-
-	const key = ensureOpenAIKey();
-	if (!key) {
-		process.exit(0);
-	}
+	requireInit();
+	ensureProviderReady();
 
 	const queryVector = await embedText(query);
 	const results = await searchSolutions(queryVector, 5, { queryText: query });
