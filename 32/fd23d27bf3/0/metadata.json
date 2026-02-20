@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "32fd23d27bf3",
+  "session_id": "unknown",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-20T19:51:32.911514Z",
+  "branch": "main",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "apps/tui/src/mem/commands/reset.ts",
+    "apps/tui/src/mem/commands/status.ts",
+    "apps/tui/src/mem/lib/guards.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "ec84c65766f7",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-20T19:51:32.830144Z",
+    "agent_lines": 0,
+    "human_added": 2234,
+    "human_modified": 410,
+    "human_removed": 0,
+    "total_committed": 2234,
+    "agent_percentage": 0
+  },
+  "transcript_path": ".cursor/projects/Users-balkhaev-mycode-yep/agent-transcripts/ba20ba30-bb48-4ae6-88cc-83a722a8e24d/ba20ba30-bb48-4ae6-88cc-83a722a8e24d.jsonl"
+}
