@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "d0b27a44ae96",
+  "session_id": "unknown",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-20T13:44:46.992889Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/tui/src/mem/commands/context.ts",
+    "apps/tui/src/mem/commands/diff.ts",
+    "apps/tui/src/mem/commands/status.ts",
+    "apps/tui/src/mem/commands/watch.ts",
+    "apps/tui/src/mem/core/summarizer.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f152606ca0ea",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-20T13:44:46.934674Z",
+    "agent_lines": 0,
+    "human_added": 2946,
+    "human_modified": 716,
+    "human_removed": 0,
+    "total_committed": 2976,
+    "agent_percentage": 0
+  },
+  "transcript_path": ".cursor/projects/Users-balkhaev-mycode-yep/agent-transcripts/ba20ba30-bb48-4ae6-88cc-83a722a8e24d/ba20ba30-bb48-4ae6-88cc-83a722a8e24d.jsonl"
+}
