@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "8c91b32f250f",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".github/dependabot.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
+    "apps/desktop/src/components/ErrorBoundary.tsx",
+    "apps/desktop/src/hooks/queries.ts",
+    "apps/desktop/src/pages/Search.tsx",
+    "apps/tui/src/mem/commands/debug.ts",
+    "apps/tui/src/mem/core/__tests__/cache.test.ts",
+    "apps/tui/src/mem/core/__tests__/chunker.test.ts",
+    "apps/tui/src/mem/core/__tests__/code-chunker.test.ts",
+    "apps/tui/src/mem/core/__tests__/store.test.ts",
+    "apps/tui/src/mem/core/sync-engine.ts",
+    "apps/tui/src/mem/core/ts-parser.ts",
+    "apps/tui/src/mem/lib/__tests__/lock.test.ts",
+    "apps/tui/src/mem/lib/lock.ts",
+    "apps/tui/src/mem/lib/logger.ts",
+    "apps/tui/src/mem/lib/retry.ts",
+    "apps/tui/src/tui/helpers.ts",
+    "apps/tui/src/tui/types.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/8c/91b32f250f/0/metadata.json",
+      "transcript": "/8c/91b32f250f/0/full.jsonl",
+      "context": "",
+      "content_hash": "/8c/91b32f250f/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}

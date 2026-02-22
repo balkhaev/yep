@@ -1,0 +1,49 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "8c91b32f250f",
+  "session_id": "unknown",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-22T04:15:36.9007Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".github/dependabot.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
+    "apps/desktop/src/components/ErrorBoundary.tsx",
+    "apps/desktop/src/hooks/queries.ts",
+    "apps/desktop/src/pages/Search.tsx",
+    "apps/tui/src/mem/commands/debug.ts",
+    "apps/tui/src/mem/core/__tests__/cache.test.ts",
+    "apps/tui/src/mem/core/__tests__/chunker.test.ts",
+    "apps/tui/src/mem/core/__tests__/code-chunker.test.ts",
+    "apps/tui/src/mem/core/__tests__/store.test.ts",
+    "apps/tui/src/mem/core/sync-engine.ts",
+    "apps/tui/src/mem/core/ts-parser.ts",
+    "apps/tui/src/mem/lib/__tests__/lock.test.ts",
+    "apps/tui/src/mem/lib/lock.ts",
+    "apps/tui/src/mem/lib/logger.ts",
+    "apps/tui/src/mem/lib/retry.ts",
+    "apps/tui/src/tui/helpers.ts",
+    "apps/tui/src/tui/types.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "d156fa39ed0c",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-22T04:15:36.547645Z",
+    "agent_lines": 2079,
+    "human_added": 3280,
+    "human_modified": 872,
+    "human_removed": 0,
+    "total_committed": 6217,
+    "agent_percentage": 33.44056618948046
+  },
+  "transcript_path": ".cursor/projects/Users-balkhaev-mycode-yep/agent-transcripts/82466cb7-5ef3-438e-8b49-7f8439dd1d5e/82466cb7-5ef3-438e-8b49-7f8439dd1d5e.jsonl"
+}
