@@ -1,7 +1,10 @@
 import { Index, type Table } from "@lancedb/lancedb";
 import { getVectorDimensions } from "../lib/config.ts";
+import { createLogger } from "../lib/logger.ts";
 import type { CodeChunk } from "./code-chunker.ts";
 import { getConnection } from "./store.ts";
+
+const log = createLogger("code-store");
 
 const CODE_TABLE = "code_symbols";
 
@@ -117,8 +120,8 @@ async function migrateCodeSchema(table: Table): Promise<void> {
 			await table.add([emptyRow]);
 			await table.delete('id = ""');
 		}
-	} catch {
-		// migration best-effort
+	} catch (err) {
+		log.warn("Schema migration failed", { error: String(err) });
 	}
 }
 
@@ -134,8 +137,8 @@ export async function initCodeStore(): Promise<void> {
 	await table.delete('id = ""');
 	try {
 		await table.createIndex("embeddingText", { config: Index.fts() });
-	} catch {
-		// FTS may fail on empty table
+	} catch (err) {
+		log.debug("FTS index creation skipped", { error: String(err) });
 	}
 }
 
@@ -171,8 +174,8 @@ export async function deleteCodeChunksByPath(path: string): Promise<void> {
 	const table = await getCodeTable();
 	try {
 		await table.delete(`path = '${path.replace(/'/g, "''")}'`);
-	} catch {
-		// empty table
+	} catch (err) {
+		log.warn("Delete by path failed", { path, error: String(err) });
 	}
 }
 
@@ -183,8 +186,8 @@ export async function ensureCodeFtsIndex(): Promise<void> {
 	const table = await getCodeTable();
 	try {
 		await table.createIndex("embeddingText", { config: Index.fts() });
-	} catch {
-		// already exists or empty
+	} catch (err) {
+		log.debug("FTS index update skipped", { error: String(err) });
 	}
 }
 
@@ -250,7 +253,8 @@ async function fetchExactMatches(
 			.where(conds.join(" AND "))
 			.limit(fetchK)
 			.toArray()) as Record<string, unknown>[];
-	} catch {
+	} catch (err) {
+		log.debug("Exact match query failed", { queryText, error: String(err) });
 		return [];
 	}
 }
@@ -282,8 +286,8 @@ export async function searchCode(
 				ftsQuery = ftsQuery.where(whereClause);
 			}
 			ftsResults = (await ftsQuery.toArray()) as Record<string, unknown>[];
-		} catch {
-			// FTS might not be available
+		} catch (err) {
+			log.debug("FTS search failed", { error: String(err) });
 		}
 	}
 
@@ -327,7 +331,7 @@ export async function getCodeStats(): Promise<{
 	}
 	const table = await getCodeTable();
 	const count = await table.countRows();
-	const rows = await table.query().select(["language"]).limit(500).toArray();
+	const rows = await table.query().select(["language"]).toArray();
 	const langs = new Set<string>();
 	for (const row of rows) {
 		const lang = row.language as string;
@@ -343,7 +347,7 @@ export async function getIndexedCodePaths(): Promise<Set<string>> {
 		return new Set();
 	}
 	const table = await getCodeTable();
-	const rows = await table.query().select(["path"]).limit(10_000).toArray();
+	const rows = await table.query().select(["path"]).toArray();
 	return new Set(rows.map((r) => r.path as string));
 }
 
@@ -413,24 +417,21 @@ export async function findCallees(symbolName: string): Promise<CodeResult[]> {
 	if (!sym?.calls) {
 		return [];
 	}
-	const callNames = sym.calls.split(",").filter(Boolean);
+	const callNames = sym.calls.split(",").filter(Boolean).slice(0, 10);
 	if (callNames.length === 0) {
 		return [];
 	}
 
 	const table = await getCodeTable();
-	const results: CodeResult[] = [];
-	for (const name of callNames.slice(0, 10)) {
-		const rows = await table
-			.query()
-			.where(`symbol = '${name.replace(/'/g, "''")}'`)
-			.limit(1)
-			.toArray();
-		if (rows[0]) {
-			results.push(rowToCodeResult(rows[0] as Record<string, unknown>));
-		}
-	}
-	return results;
+	const conditions = callNames
+		.map((name) => `symbol = '${name.replace(/'/g, "''")}'`)
+		.join(" OR ");
+	const rows = await table
+		.query()
+		.where(`(${conditions})`)
+		.limit(callNames.length)
+		.toArray();
+	return (rows as Record<string, unknown>[]).map(rowToCodeResult);
 }
 
 export async function findImporters(symbolName: string): Promise<CodeResult[]> {

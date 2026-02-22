@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
+import { parseFileWithTsCompiler } from "./ts-parser.ts";
 
 export interface CodeSymbol {
 	body: string;
@@ -330,6 +331,29 @@ function matchSymbol(trimmed: string): SymbolMatch | null {
 	return null;
 }
 
+const STRINGS_AND_REGEX_RE =
+	/(['"`])(?:(?!\1)[^\\]|\\.)*?\1|\/(?:[^/\\]|\\.)+\/[gimsuy]*/g;
+
+function hasTopLevelArrow(line: string): boolean {
+	const stripped = line.replace(STRINGS_AND_REGEX_RE, "");
+	let depth = 0;
+	let prev = "";
+	for (const ch of stripped) {
+		if (ch === "(" || ch === "[") {
+			depth++;
+		} else if (ch === ")" || ch === "]") {
+			depth--;
+		} else if (ch === ">" && prev === "=" && depth === 0) {
+			return true;
+		}
+		prev = ch;
+	}
+	return false;
+}
+
+const VALID_ARROW_RHS_RE =
+	/=\s*(?:async\s+)?(?:\(|<|[a-zA-Z_]\w*\s*(?:=>|,|\)))/;
+
 function tryMatchMultilineArrow(
 	lines: string[],
 	lineIdx: number
@@ -346,10 +370,19 @@ function tryMatchMultilineArrow(
 	if (trimmed.includes(";") || trimmed.endsWith(",")) {
 		return null;
 	}
+
+	const eqIdx = trimmed.indexOf("=");
+	if (eqIdx !== -1) {
+		const rhs = trimmed.slice(eqIdx);
+		if (!VALID_ARROW_RHS_RE.test(rhs)) {
+			return null;
+		}
+	}
+
 	const lookahead = Math.min(lineIdx + 8, lines.length);
 	for (let j = lineIdx; j < lookahead; j++) {
 		const line = lines[j] ?? "";
-		if (line.includes("=>")) {
+		if (hasTopLevelArrow(line)) {
 			return { name, symbolType: "function", nameIdx: 3 };
 		}
 		if (j > lineIdx && (line.trim() === "" || line.includes(";"))) {
@@ -419,20 +452,40 @@ function extractClassMethods(
 	return methods;
 }
 
+const TS_JS_EXTS = new Set([".ts", ".tsx", ".js", ".jsx"]);
+
 export function parseFileSymbols(filePath: string): CodeSymbol[] {
+	const language = detectLanguage(filePath);
+	if (language === "unknown") {
+		return [];
+	}
+
+	const ext = extname(filePath);
+	if (TS_JS_EXTS.has(ext)) {
+		try {
+			return parseFileWithTsCompiler(filePath);
+		} catch {
+			// fall through to regex parser
+		}
+	}
+
+	return parseFileSymbolsRegex(filePath);
+}
+
+function parseFileSymbolsRegex(filePath: string): CodeSymbol[] {
 	const content = readFileSync(filePath, "utf-8");
 	const lines = content.split("\n");
 	const symbols: CodeSymbol[] = [];
 	const language = detectLanguage(filePath);
-	if (language === "unknown") {
-		return symbols;
-	}
 
 	const fileImports = extractFileImports(content);
 	const isTsx = TSX_EXT_RE.test(filePath);
 
 	for (let i = 0; i < lines.length; i++) {
 		const trimmed = (lines[i] ?? "").trimStart();
+		if (trimmed.endsWith(",")) {
+			continue;
+		}
 		let matched = matchSymbol(trimmed);
 
 		if (!matched) {

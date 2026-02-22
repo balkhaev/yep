@@ -6,8 +6,10 @@ import {
 	getOllamaBaseUrl,
 	getProvider,
 } from "../lib/config.ts";
+import { createLogger } from "../lib/logger.ts";
 import { getCachedEmbedding, setCachedEmbedding } from "./cache.ts";
 
+const log = createLogger("embedder");
 const MAX_RETRIES = 3;
 
 function resolveModel() {
@@ -23,12 +25,25 @@ function resolveModel() {
 }
 
 async function embedTextRaw(text: string): Promise<number[]> {
-	const { embedding } = await embed({
-		model: resolveModel(),
-		value: text,
-		maxRetries: MAX_RETRIES,
-	});
-	return embedding;
+	return withRetry(
+		async () => {
+			const { embedding } = await embed({
+				model: resolveModel(),
+				value: text,
+				maxRetries: MAX_RETRIES,
+			});
+			return embedding;
+		},
+		{
+			attempts: 3,
+			onRetry: (err, attempt) => {
+				log.warn(`Embedding retry ${attempt}`, {
+					error: err instanceof Error ? err.message : String(err),
+					textLength: text.length,
+				});
+			},
+		}
+	);
 }
 
 export async function embedText(text: string): Promise<number[]> {

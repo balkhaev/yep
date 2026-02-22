@@ -241,7 +241,10 @@ function streamSSE<T extends { event: string; data: Record<string, unknown> }>(
 	return controller;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+	path: string,
+	init?: RequestInit & { signal?: AbortSignal }
+): Promise<T> {
 	const res = await fetch(`${API_BASE}${path}`, {
 		...init,
 		headers: { "Content-Type": "application/json", ...init?.headers },

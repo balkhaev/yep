@@ -13,7 +13,8 @@
   ],
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
-    "mem": "bun run src/index.tsx"
+    "mem": "bun run src/index.tsx",
+    "test": "bun test src/"
   },
   "keywords": [
     "ai",
@@ -29,6 +30,9 @@
     "directory": "apps/tui"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",
     "@lancedb/lancedb": "^0.16.0",

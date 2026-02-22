@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type CodeInsights } from "@/api";
 import AnimatedNumber from "@/components/charts/AnimatedNumber";
@@ -11,6 +11,7 @@ import {
 	LANG_CHART_COLORS,
 	TYPE_CHART_COLORS,
 } from "@/components/charts/theme";
+import { useCodeInsights } from "@/hooks/queries";
 
 function StatNumber({
 	value,
@@ -95,49 +96,43 @@ function buildHealthData(insights: CodeInsights) {
 
 export default function Insights() {
 	const navigate = useNavigate();
-	const [insights, setInsights] = useState<CodeInsights | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+	const {
+		data: insights,
+		isLoading: loading,
+		error: queryError,
+		refetch: refetchInsights,
+	} = useCodeInsights();
 	const [indexing, setIndexing] = useState(false);
 	const [indexMessage, setIndexMessage] = useState("");
 	const [deadExpanded, setDeadExpanded] = useState(false);
+	const [indexError, setIndexError] = useState<string | null>(null);
 
-	const loadInsights = useCallback(() => {
-		setLoading(true);
-		setError(null);
-		api.code
-			.insights()
-			.then(setInsights)
-			.catch((e) => {
-				if (e instanceof Error && e.message.includes("404")) {
-					setInsights(null);
-				} else {
-					setError(e instanceof Error ? e.message : String(e));
-				}
-			})
-			.finally(() => setLoading(false));
-	}, []);
+	function extractErrorMessage(err: unknown): string {
+		return err instanceof Error ? err.message : String(err);
+	}
+	const error =
+		indexError ?? (queryError ? extractErrorMessage(queryError) : null);
 
-	useEffect(() => {
-		loadInsights();
-	}, [loadInsights]);
+	const controllerRef = useRef<AbortController | null>(null);
 
 	const handleIndexCode = useCallback(() => {
 		setIndexing(true);
 		setIndexMessage("Starting...");
+		setIndexError(null);
 		const controller = api.code.indexCode((event) => {
 			if (event.event === "progress") {
 				setIndexMessage(event.data.message);
 			} else if (event.event === "done") {
 				setIndexing(false);
-				loadInsights();
+				refetchInsights();
 			} else if (event.event === "error") {
 				setIndexing(false);
-				setError(event.data.message);
+				setIndexError(event.data.message);
 			}
 		});
-		return () => controller.abort();
-	}, [loadInsights]);
+		controllerRef.current = controller;
+		return () => controllerRef.current?.abort();
+	}, [refetchInsights]);
 
 	if (loading) {
 		return (
@@ -158,7 +153,7 @@ export default function Insights() {
 					<p className="mt-2 text-sm text-zinc-500">{error}</p>
 					<button
 						className="btn-secondary mt-4"
-						onClick={loadInsights}
+						onClick={() => refetchInsights()}
 						type="button"
 					>
 						Retry

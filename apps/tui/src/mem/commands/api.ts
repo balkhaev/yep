@@ -1,17 +1,16 @@
-import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { SSEStreamingApi } from "hono/streaming";
 import { streamSSE } from "hono/streaming";
+import { z } from "zod";
 
 // LanceDB returns BigInt for numeric fields — make them JSON-serializable
-// biome-ignore lint/suspicious/noGlobalAssign: required for LanceDB BigInt compat
-BigInt.prototype.toJSON = function () {
+(BigInt.prototype as unknown as { toJSON: () => number }).toJSON = function (
+	this: bigint
+) {
 	return Number(this);
 };
 
-import { clearCache } from "../core/cache.ts";
-import { chunkCheckpoints } from "../core/chunker.ts";
 import {
 	findCallees,
 	findCallers,
@@ -22,24 +21,17 @@ import {
 	getRecentIndexedFiles,
 	listAllSymbols,
 } from "../core/code-store.ts";
-import { embedText, embedTexts } from "../core/embedder.ts";
-import type { ParsedCheckpoint } from "../core/parser.ts";
-import { parseAllCheckpoints } from "../core/parser.ts";
+import { embedText } from "../core/embedder.ts";
 import {
 	dropTable,
-	ensureFtsIndex,
-	getContentHash,
-	getIndexedChunkIds,
 	getRecentSessions,
 	getStats,
 	initStore,
-	insertChunks,
 	searchByFile,
 	searchSolutions,
 	unifiedSearch,
-	upsertChunks,
 } from "../core/store.ts";
-import { summarizeChunks } from "../core/summarizer.ts";
+import { runSync } from "../core/sync-engine.ts";
 import {
 	ensureProviderReady,
 	isInitialized,
@@ -47,136 +39,43 @@ import {
 	readConfig,
 	updateConfig,
 } from "../lib/config.ts";
-import { requireInit } from "../lib/guards.ts";
 
 type SendFn = (event: string, data: unknown) => Promise<void>;
 
-const isLocal = (id: string) => id.startsWith("local-");
+const SearchSchema = z.object({
+	query: z.string().min(1, "query is required"),
+	top_k: z.number().int().positive().optional().default(5),
+	min_score: z.number().min(0).max(1).optional(),
+	agent: z.string().optional(),
+	files: z.array(z.string()).optional(),
+});
 
-function extractCheckpointIds(existingIds: Set<string>): Set<string> {
-	const cpIds = new Set<string>();
-	for (const id of existingIds) {
-		const cpId = id.split("-").slice(0, -2).join("-");
-		if (cpId) {
-			cpIds.add(cpId);
-		}
-	}
-	return cpIds;
-}
+const SearchAllSchema = z.object({
+	query: z.string().min(1, "query is required"),
+	top_k: z.number().int().positive().optional().default(5),
+	source: z.enum(["all", "transcript", "code"]).optional().default("all"),
+	min_score: z.number().min(0).max(1).optional(),
+});
 
-async function findChangedLocals(
-	localCheckpoints: ParsedCheckpoint[]
-): Promise<Array<ParsedCheckpoint & { _contentHash: string }>> {
-	const changed: Array<ParsedCheckpoint & { _contentHash: string }> = [];
-	for (const cp of localCheckpoints) {
-		const rawContent = cp.sessions
-			.map((s) => s.transcript.map((t) => t.content).join(""))
-			.join("");
-		const hash = createHash("sha256")
-			.update(rawContent)
-			.digest("hex")
-			.slice(0, 16);
-		const existingHash = await getContentHash(cp.id);
-		if (existingHash !== hash) {
-			changed.push(Object.assign(cp, { _contentHash: hash }));
-		}
-	}
-	return changed;
-}
+const ConfigSchema = z
+	.object({
+		provider: z.enum(["openai", "ollama"]).optional(),
+		openaiApiKey: z.string().nullable().optional(),
+		ollamaBaseUrl: z.string().nullable().optional(),
+		embeddingModel: z.string().nullable().optional(),
+		summarizerModel: z.string().nullable().optional(),
+		scope: z.string().optional(),
+	})
+	.passthrough();
 
-async function runSync(send: SendFn): Promise<void> {
-	ensureProviderReady();
-	requireInit();
+const ResetSchema = z.object({
+	reindex: z.boolean().optional().default(false),
+});
 
-	await send("progress", {
-		step: "parsing",
-		message: "Parsing checkpoints...",
+async function runSyncSSE(send: SendFn): Promise<void> {
+	const result = await runSync(async (step, message) => {
+		await send("progress", { step, message });
 	});
-
-	const existingCpIds = extractCheckpointIds(await getIndexedChunkIds());
-	const checkpoints = await parseAllCheckpoints();
-
-	if (checkpoints.length === 0) {
-		await send("done", { message: "No checkpoints found.", total: 0 });
-		return;
-	}
-
-	const newCheckpoints = checkpoints.filter(
-		(cp) => !(existingCpIds.has(cp.id) || isLocal(cp.id))
-	);
-	const changedLocals = await findChangedLocals(
-		checkpoints.filter((cp) => isLocal(cp.id))
-	);
-
-	const allToProcess = [...newCheckpoints, ...changedLocals];
-	if (allToProcess.length === 0) {
-		await send("done", { message: "Everything up to date.", total: 0 });
-		return;
-	}
-
-	await send("progress", {
-		step: "chunking",
-		message: `${newCheckpoints.length} new + ${changedLocals.length} updated checkpoint(s)`,
-	});
-
-	const allChunks = chunkCheckpoints(allToProcess);
-	if (allChunks.length === 0) {
-		await send("done", { message: "No chunks to index.", total: 0 });
-		return;
-	}
-
-	await send("progress", {
-		step: "summarizing",
-		message: `Summarizing ${allChunks.length} chunk(s)...`,
-	});
-	const summaries = await summarizeChunks(
-		allChunks.map((c) => ({
-			prompt: c.prompt,
-			response: c.response,
-			diffSummary: c.diffSummary,
-		})),
-		(done, total) => {
-			send("progress", {
-				step: "summarizing",
-				message: `Summarizing ${done}/${total}...`,
-			});
-		}
-	);
-	for (let i = 0; i < allChunks.length; i++) {
-		const chunk = allChunks[i];
-		const summary = summaries[i];
-		if (chunk && summary) {
-			chunk.summary = summary;
-			chunk.embeddingText = summary;
-		}
-	}
-
-	await send("progress", {
-		step: "embedding",
-		message: `Embedding ${allChunks.length} chunk(s)...`,
-	});
-	const vectors = await embedTexts(
-		allChunks.map((c) => c.embeddingText),
-		{
-			onBatchComplete(completed, total) {
-				send("progress", {
-					step: "embedding",
-					message: `Embedding ${completed}/${total}...`,
-				});
-			},
-		}
-	);
-
-	await send("progress", { step: "indexing", message: "Indexing..." });
-	const totalInserted = await indexSyncResults(
-		allChunks,
-		vectors,
-		changedLocals
-	);
-
-	await ensureFtsIndex();
-	clearCache();
-	updateConfig({ lastIndexedCommit: readConfig().lastIndexedCommit });
 
 	await send("progress", {
 		step: "code-index",
@@ -209,39 +108,9 @@ async function runSync(send: SendFn): Promise<void> {
 	}
 
 	await send("done", {
-		message: `Sync complete! Indexed ${totalInserted} chunk(s).`,
-		total: totalInserted,
+		message: `Sync complete! Indexed ${result.totalInserted} chunk(s).`,
+		total: result.totalInserted,
 	});
-}
-
-async function indexSyncResults(
-	allChunks: ReturnType<typeof chunkCheckpoints>,
-	vectors: number[][],
-	changedLocals: Array<ParsedCheckpoint & { _contentHash: string }>
-): Promise<number> {
-	const newChunks = allChunks.filter((c) => !isLocal(c.checkpointId));
-	const localChunks = allChunks.filter((c) => isLocal(c.checkpointId));
-	let total = 0;
-
-	if (newChunks.length > 0) {
-		total += await insertChunks(newChunks, vectors.slice(0, newChunks.length));
-	}
-
-	if (localChunks.length > 0) {
-		const localVectors = vectors.slice(newChunks.length);
-		for (const cp of changedLocals) {
-			const cpChunks = localChunks.filter((c) => c.checkpointId === cp.id);
-			const first = cpChunks[0] ?? localChunks[0];
-			const startIdx = first ? localChunks.indexOf(first) : 0;
-			const cpVectors = localVectors.slice(
-				startIdx,
-				startIdx + cpChunks.length
-			);
-			total += await upsertChunks(cpChunks, cpVectors, cp._contentHash);
-		}
-	}
-
-	return total;
 }
 
 const app = new Hono();
@@ -262,31 +131,28 @@ app.get("/status", async (c) => {
 app.get("/config", (c) => c.json(readConfig()));
 
 app.post("/config", async (c) => {
-	const body = (await c.req.json()) as Partial<MemConfig>;
-	updateConfig(body);
+	const parsed = ConfigSchema.safeParse(await c.req.json());
+	if (!parsed.success) {
+		return c.json({ error: parsed.error.flatten() }, 400);
+	}
+	updateConfig(parsed.data as Partial<MemConfig>);
 	return c.json(readConfig());
 });
 
 app.post("/search", async (c) => {
-	const body = (await c.req.json()) as {
-		query: string;
-		top_k?: number;
-		min_score?: number;
-		agent?: string;
-		files?: string[];
-	};
-
-	if (!body.query) {
-		return c.json({ error: "query is required" }, 400);
+	const parsed = SearchSchema.safeParse(await c.req.json());
+	if (!parsed.success) {
+		return c.json({ error: parsed.error.flatten() }, 400);
 	}
 
+	const { query, top_k, min_score, agent, files } = parsed.data;
 	ensureProviderReady();
-	const queryVector = await embedText(body.query);
-	const results = await searchSolutions(queryVector, body.top_k ?? 5, {
-		agent: body.agent,
-		files: body.files,
-		minScore: body.min_score,
-		queryText: body.query,
+	const queryVector = await embedText(query);
+	const results = await searchSolutions(queryVector, top_k, {
+		agent,
+		files,
+		minScore: min_score,
+		queryText: query,
 	});
 
 	return c.json({ results });
@@ -315,7 +181,7 @@ app.post("/sync", (c) => {
 			stream.writeSSE({ data: JSON.stringify(data), event });
 
 		try {
-			await runSync(send);
+			await runSyncSSE(send);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			await send("error", { message });
@@ -324,7 +190,8 @@ app.post("/sync", (c) => {
 });
 
 app.post("/reset", async (c) => {
-	const body = (await c.req.json().catch(() => ({}))) as { reindex?: boolean };
+	const parsed = ResetSchema.safeParse(await c.req.json().catch(() => ({})));
+	const reindex = parsed.success ? parsed.data.reindex : false;
 	const dropped = await dropTable();
 	await initStore();
 	updateConfig({ lastIndexedCommit: null });
@@ -332,7 +199,7 @@ app.post("/reset", async (c) => {
 	return c.json({
 		dropped,
 		reinitialized: true,
-		message: body.reindex
+		message: reindex
 			? "Store reset. Use POST /sync to reindex."
 			: "Store reset.",
 	});
@@ -374,23 +241,18 @@ app.get("/code/symbol/:name", async (c) => {
 });
 
 app.post("/search-all", async (c) => {
-	const body = (await c.req.json()) as {
-		query: string;
-		top_k?: number;
-		source?: "all" | "transcript" | "code";
-		min_score?: number;
-	};
-
-	if (!body.query) {
-		return c.json({ error: "query is required" }, 400);
+	const parsed = SearchAllSchema.safeParse(await c.req.json());
+	if (!parsed.success) {
+		return c.json({ error: parsed.error.flatten() }, 400);
 	}
 
+	const { query, top_k, source, min_score } = parsed.data;
 	ensureProviderReady();
-	const queryVector = await embedText(body.query);
-	const results = await unifiedSearch(queryVector, body.top_k ?? 5, {
-		source: body.source ?? "all",
-		minScore: body.min_score,
-		queryText: body.query,
+	const queryVector = await embedText(query);
+	const results = await unifiedSearch(queryVector, top_k, {
+		source,
+		minScore: min_score,
+		queryText: query,
 	});
 
 	return c.json({ results });
@@ -443,6 +305,63 @@ app.post("/index-code", (c) => {
 			await send("error", { message: msg });
 		}
 	});
+});
+
+// ── Debug endpoints ─────────────────────────────────────────
+
+app.post("/debug/parse", async (c) => {
+	const body = (await c.req.json()) as { file: string };
+	if (!body.file) {
+		return c.json({ error: "file is required" }, 400);
+	}
+	const { debugParse } = await import("./debug.ts");
+	const result = await debugParse(body.file);
+	return c.json(result);
+});
+
+app.get("/debug/index", async (c) => {
+	const { debugIndex } = await import("./debug.ts");
+	const result = await debugIndex();
+	return c.json(result);
+});
+
+app.post("/debug/search", async (c) => {
+	const body = (await c.req.json()) as { query: string };
+	if (!body.query) {
+		return c.json({ error: "query is required" }, 400);
+	}
+	ensureProviderReady();
+	const { debugSearch } = await import("./debug.ts");
+	const result = await debugSearch(body.query);
+	return c.json(result);
+});
+
+app.post("/debug/embedding", async (c) => {
+	const body = (await c.req.json()) as { text: string };
+	if (!body.text) {
+		return c.json({ error: "text is required" }, 400);
+	}
+	ensureProviderReady();
+	const { debugEmbedding } = await import("./debug.ts");
+	const result = await debugEmbedding(body.text);
+	return c.json(result);
+});
+
+app.post("/debug/symbol", async (c) => {
+	const body = (await c.req.json()) as { name: string };
+	if (!body.name) {
+		return c.json({ error: "name is required" }, 400);
+	}
+	ensureProviderReady();
+	const { debugSymbol } = await import("./debug.ts");
+	const result = await debugSymbol(body.name);
+	return c.json(result);
+});
+
+app.post("/debug/cleanup", async (c) => {
+	const { debugCleanup } = await import("./debug.ts");
+	const result = await debugCleanup();
+	return c.json(result);
 });
 
 export { app as apiApp };

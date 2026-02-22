@@ -5,17 +5,13 @@ import {
 	useRef,
 	useState,
 } from "react";
-import {
-	api,
-	type SearchResult,
-	type StatusResponse,
-	type UnifiedResult,
-} from "@/api";
+import { api, type SearchResult, type UnifiedResult } from "@/api";
 import AnimatedNumber from "@/components/charts/AnimatedNumber";
 import MiniAreaChart from "@/components/charts/MiniAreaChart";
 import ScoreRing from "@/components/charts/ScoreRing";
 import HighlightText from "@/components/Highlight";
 import SearchResultCard from "@/components/SearchResult";
+import { useStatus } from "@/hooks/queries";
 
 function useDebounce<T>(value: T, delay: number): T {
 	const [debounced, setDebounced] = useState(value);
@@ -247,17 +243,16 @@ export default function Search() {
 	const debouncedQuery = useDebounce(query, 400);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const loadingRef = useRef(false);
+	const { data: statusData } = useStatus();
+
+	useEffect(() => {
+		if (statusData?.stats?.agents) {
+			setAgents(statusData.stats.agents);
+		}
+	}, [statusData]);
 
 	useEffect(() => {
 		inputRef.current?.focus();
-		api
-			.status()
-			.then((s: StatusResponse) => {
-				if (s.stats?.agents) {
-					setAgents(s.stats.agents);
-				}
-			})
-			.catch(() => undefined);
 
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -337,10 +332,20 @@ export default function Search() {
 	handleSearchRef.current = handleSearch;
 
 	useEffect(() => {
-		if (debouncedQuery.trim()) {
-			handleSearchRef.current(undefined, debouncedQuery);
+		if (!debouncedQuery.trim()) {
+			return;
 		}
-	}, [debouncedQuery, source]);
+		let cancelled = false;
+		const run = async () => {
+			if (!cancelled) {
+				await handleSearchRef.current(undefined, debouncedQuery);
+			}
+		};
+		run();
+		return () => {
+			cancelled = true;
+		};
+	}, [debouncedQuery]);
 
 	const handleExampleClick = useCallback((exampleQuery: string) => {
 		setQuery(exampleQuery);

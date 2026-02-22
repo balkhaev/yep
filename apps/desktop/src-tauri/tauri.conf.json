@@ -39,6 +39,13 @@
 	"plugins": {
 		"shell": {
 			"open": true
+		},
+		"updater": {
+			"active": true,
+			"dialog": true,
+			"endpoints": [
+				"https://github.com/balkhaev/yep/releases/latest/download/latest.json"
+			]
 		}
 	}
 }

@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getStorePath } from "../lib/config.ts";
+import { createLogger } from "../lib/logger.ts";
+
+const log = createLogger("cache");
 
 const MAX_EMBEDDING_ENTRIES = 200;
 const MAX_SEARCH_ENTRIES = 50;
@@ -39,7 +42,8 @@ function readCacheFile<T>(path: string): CacheData<T> {
 	}
 	try {
 		return JSON.parse(readFileSync(path, "utf-8")) as CacheData<T>;
-	} catch {
+	} catch (err) {
+		log.debug("Failed to read cache file", { path, error: String(err) });
 		return { entries: {} };
 	}
 }

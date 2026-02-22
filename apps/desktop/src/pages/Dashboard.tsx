@@ -1,19 +1,18 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-	api,
-	type CodeInsights,
-	type CodeStats,
-	type FileInfo,
-	type RecentSession,
-	type StatusResponse,
-} from "@/api";
+import type { CodeInsights, RecentSession } from "@/api";
 import DonutChart from "@/components/charts/DonutChart";
 import HorizontalBarChart from "@/components/charts/HorizontalBarChart";
 import MiniAreaChart from "@/components/charts/MiniAreaChart";
 import RadarHealth from "@/components/charts/RadarHealth";
 import { CHART_COLORS, LANG_CHART_COLORS } from "@/components/charts/theme";
 import StatusCard from "@/components/StatusCard";
+import {
+	useCodeFiles,
+	useCodeInsights,
+	useCodeStats,
+	useRecentSessions,
+	useStatus,
+} from "@/hooks/queries";
 
 function FileIcon() {
 	return (
@@ -92,23 +91,11 @@ function CenteredMessage({ children }: { children: React.ReactNode }) {
 	);
 }
 
-function DashboardContent({
-	status,
-	codeStats,
-	insights,
-	recent,
-	codeFiles,
-}: {
-	status: StatusResponse;
-	codeStats: CodeStats | null;
-	insights: CodeInsights | null;
-	recent: RecentSession[];
-	codeFiles: FileInfo[];
-}) {
-	const navigate = useNavigate();
-	const { stats, config } = status;
-	const lastCommit = config?.lastIndexedCommit;
-
+function prepareDashboardData(
+	insights: CodeInsights | null,
+	recent: RecentSession[],
+	totalChunks: number
+) {
 	const langDonutData =
 		insights?.languageDistribution.map((l) => ({
 			name: l.language,
@@ -128,9 +115,29 @@ function DashboardContent({
 			value3: s.importerCount,
 		})) ?? [];
 
-	const healthData = insights
-		? buildHealthData(insights, stats?.totalChunks ?? 0)
-		: [];
+	const healthData = insights ? buildHealthData(insights, totalChunks) : [];
+
+	return { langDonutData, sparklineData, connectedBarData, healthData };
+}
+
+function DashboardContent({
+	status,
+	codeStats,
+	insights,
+	recent,
+	codeFiles,
+}: {
+	status: StatusResponse;
+	codeStats: CodeStats | null;
+	insights: CodeInsights | null;
+	recent: RecentSession[];
+	codeFiles: FileInfo[];
+}) {
+	const navigate = useNavigate();
+	const { stats, config } = status;
+	const lastCommit = config?.lastIndexedCommit;
+	const { langDonutData, sparklineData, connectedBarData, healthData } =
+		prepareDashboardData(insights, recent, stats?.totalChunks ?? 0);
 
 	return (
 		<div className="space-y-8">
@@ -413,34 +420,17 @@ function DashboardContent({
 }
 
 export default function Dashboard() {
-	const [status, setStatus] = useState<StatusResponse | null>(null);
-	const [codeStats, setCodeStats] = useState<CodeStats | null>(null);
-	const [insights, setInsights] = useState<CodeInsights | null>(null);
-	const [recent, setRecent] = useState<RecentSession[]>([]);
-	const [codeFiles, setCodeFiles] = useState<FileInfo[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+	const {
+		data: status,
+		isLoading: statusLoading,
+		error: statusError,
+	} = useStatus();
+	const { data: codeStats } = useCodeStats();
+	const { data: recentData } = useRecentSessions(5);
+	const { data: codeFilesData } = useCodeFiles(8);
+	const { data: insights } = useCodeInsights();
 
-	useEffect(() => {
-		Promise.all([
-			api.status(),
-			api.code.stats().catch(() => null),
-			api.recent(5).catch(() => ({ sessions: [] })),
-			api.code.files(8).catch(() => ({ files: [] })),
-			api.code.insights().catch(() => null),
-		])
-			.then(([s, cs, r, cf, ins]) => {
-				setStatus(s);
-				setCodeStats(cs);
-				setRecent(r.sessions);
-				setCodeFiles(cf.files);
-				setInsights(ins);
-			})
-			.catch((e) => setError(e instanceof Error ? e.message : String(e)))
-			.finally(() => setLoading(false));
-	}, []);
-
-	if (loading) {
+	if (statusLoading) {
 		return (
 			<CenteredMessage>
 				<div className="flex items-center gap-3 text-sm text-zinc-500">
@@ -451,7 +441,9 @@ export default function Dashboard() {
 		);
 	}
 
-	if (error) {
+	if (statusError) {
+		const message =
+			statusError instanceof Error ? statusError.message : String(statusError);
 		return (
 			<CenteredMessage>
 				<div className="card max-w-md p-8 text-center">
@@ -459,7 +451,7 @@ export default function Dashboard() {
 						<span className="text-lg text-red-400">!</span>
 					</div>
 					<p className="font-semibold text-zinc-200">Connection failed</p>
-					<p className="mt-2 text-sm text-zinc-500">{error}</p>
+					<p className="mt-2 text-sm text-zinc-500">{message}</p>
 					<p className="mt-4 text-xs text-zinc-600">
 						Run{" "}
 						<code className="rounded-md bg-zinc-800 px-2 py-1 font-mono text-zinc-300">
@@ -494,10 +486,10 @@ export default function Dashboard() {
 
 	return (
 		<DashboardContent
-			codeFiles={codeFiles}
-			codeStats={codeStats}
-			insights={insights}
-			recent={recent}
+			codeFiles={codeFilesData?.files ?? []}
+			codeStats={codeStats ?? null}
+			insights={insights ?? null}
+			recent={recentData?.sessions ?? []}
 			status={status}
 		/>
 	);

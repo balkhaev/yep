@@ -30,6 +30,7 @@ function printHelp() {
     yep api             Start HTTP API server (headless, for custom clients)
     yep gui             Launch web GUI in the browser
     yep eval            Run search quality evaluation (A/B comparison)
+    yep debug           Debug tools for code index & search
 
   Run without arguments to launch the interactive TUI.
 `);
@@ -86,6 +87,11 @@ switch (command) {
 	case "eval":
 		await evalCommand();
 		break;
+	case "debug": {
+		const { debugCommand } = await import("./mem/commands/debug.ts");
+		await debugCommand();
+		break;
+	}
 	case "--help":
 	case "-h":
 	case "help":

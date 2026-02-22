@@ -12,139 +12,33 @@ import {
 import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
 // @ts-expect-error react types resolved via opentui reconciler
 import { useCallback, useEffect, useState } from "react";
-
-type View = "menu" | "search" | "code" | "status" | "diff";
-
-interface MemStats {
-	agents: string[];
-	embeddingModel: string;
-	hasTable: boolean;
-	initialized: boolean;
-	provider: string;
-	topFiles: Array<{ file: string; count: number }>;
-	totalChunks: number;
-}
-
-interface SearchHit {
-	agent: string;
-	diffSummary: string;
-	filesChanged: string;
-	prompt: string;
-	response: string;
-	score: number;
-	summary: string;
-	timestamp: string;
-	tokensUsed: number;
-}
-
-interface DiffEntry {
-	agent: string;
-	diffSummary: string;
-	prompt: string;
-	response: string;
-	summary: string;
-	timestamp: string;
-	tokensUsed: number;
-}
-
-interface CodeSearchHit {
-	body: string;
-	calls: string;
-	imports: string;
-	language: string;
-	path: string;
-	score: number;
-	symbol: string;
-	symbolType: string;
-}
-
-interface CodeRelation {
-	path: string;
-	symbol: string;
-	symbolType: string;
-}
-
-interface CodeStats {
-	hasTable: boolean;
-	languages: string[];
-	totalSymbols: number;
-}
+import {
+	doCodeSearch,
+	doDiff,
+	doSearch,
+	formatTime,
+	loadCodeRelations,
+	loadCodeStats,
+	loadStats,
+	SYMBOL_ICONS,
+	truncate,
+	wrapLines,
+} from "./tui/helpers.ts";
+import type {
+	CodeRelation,
+	CodeSearchHit,
+	CodeStats,
+	DiffEntry,
+	MemStats,
+	SearchHit,
+	View,
+} from "./tui/types.ts";
 
 function s(...chunks: TextChunk[]): StyledText {
 	return new StyledText(chunks);
 }
 
 const LEADING_SLASH_RE = /^\//;
-
-function cleanText(raw: string): string {
-	return raw
-		.replace(/<[^>]+>/g, "")
-		.replace(/\s+/g, " ")
-		.trim();
-}
-
-function truncate(text: string, maxLen = 60): string {
-	if (text.length <= maxLen) {
-		return text;
-	}
-	return `${text.slice(0, maxLen)}…`;
-}
-
-function formatTime(ts: string): string {
-	if (!ts) {
-		return "—";
-	}
-	return new Date(ts).toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-}
-
-function wrapLines(text: string, width = 68, maxLines = 6): string[] {
-	const out: string[] = [];
-	const paragraphs = text.split("\n");
-	for (const paragraph of paragraphs) {
-		if (out.length >= maxLines) {
-			break;
-		}
-		if (paragraph.length <= width) {
-			out.push(paragraph);
-			continue;
-		}
-		wrapParagraph(paragraph, width, maxLines, out);
-	}
-	if (text.length > out.join(" ").length) {
-		const last = out.at(-1) ?? "";
-		out[out.length - 1] = `${last.slice(0, width - 1)}…`;
-	}
-	return out;
-}
-
-function wrapParagraph(
-	paragraph: string,
-	width: number,
-	maxLines: number,
-	out: string[]
-): void {
-	const words = paragraph.split(" ");
-	let cur = "";
-	for (const w of words) {
-		if (out.length >= maxLines) {
-			return;
-		}
-		if (cur.length + w.length + 1 > width && cur) {
-			out.push(cur);
-			cur = w;
-		} else {
-			cur = cur ? `${cur} ${w}` : w;
-		}
-	}
-	if (cur && out.length < maxLines) {
-		out.push(cur);
-	}
-}
 
 function Section({
 	label,
@@ -166,16 +60,6 @@ function Section({
 		</box>
 	);
 }
-
-const SYMBOL_ICONS: Record<string, string> = {
-	function: "ƒ",
-	method: "ƒ",
-	class: "C",
-	interface: "I",
-	type: "T",
-	enum: "E",
-	component: "◇",
-};
 
 const MENU = [
 	{
@@ -216,146 +100,6 @@ const MENU = [
 ];
 
 let resolveExit: ((action: string | null) => void) | null = null;
-
-async function loadStats(): Promise<MemStats> {
-	try {
-		const config = await import("./mem/lib/config.ts");
-		if (!config.isInitialized()) {
-			return {
-				initialized: false,
-				provider: "openai",
-				embeddingModel: "",
-				totalChunks: 0,
-				hasTable: false,
-				topFiles: [],
-				agents: [],
-			};
-		}
-		const cfg = config.readConfig();
-		const { getStats } = await import("./mem/core/store.ts");
-		const stats = await getStats();
-		return {
-			initialized: true,
-			provider: cfg.provider,
-			embeddingModel: config.getEmbeddingModel(),
-			...stats,
-		};
-	} catch {
-		return {
-			initialized: false,
-			provider: "unknown",
-			embeddingModel: "",
-			totalChunks: 0,
-			hasTable: false,
-			topFiles: [],
-			agents: [],
-		};
-	}
-}
-
-async function doSearch(query: string): Promise<SearchHit[]> {
-	await ensureProvider();
-	const { embedText } = await import("./mem/core/embedder.ts");
-	const { searchSolutions } = await import("./mem/core/store.ts");
-	const vector = await embedText(query);
-	const results = await searchSolutions(vector, 5, { queryText: query });
-	return results.map((r) => ({
-		summary: cleanText(r.chunk.summary || r.chunk.prompt),
-		prompt: cleanText(r.chunk.prompt),
-		response: cleanText(r.chunk.response),
-		diffSummary: cleanText(r.chunk.diffSummary),
-		filesChanged: r.chunk.filesChanged,
-		score: r.score,
-		timestamp: r.chunk.timestamp,
-		agent: r.chunk.agent,
-		tokensUsed: r.chunk.tokensUsed,
-	}));
-}
-
-async function doDiff(file: string): Promise<DiffEntry[]> {
-	await ensureProvider();
-	const { searchByFile } = await import("./mem/core/store.ts");
-	const results = await searchByFile(file);
-	return results.map((r) => ({
-		summary: cleanText(r.summary || r.prompt),
-		prompt: cleanText(r.prompt),
-		response: cleanText(r.response),
-		diffSummary: r.diffSummary ? cleanText(r.diffSummary) : "",
-		timestamp: r.timestamp,
-		agent: r.agent,
-		tokensUsed: r.tokensUsed,
-	}));
-}
-
-async function ensureProvider(): Promise<void> {
-	const config = await import("./mem/lib/config.ts");
-	if (!config.isInitialized()) {
-		throw new Error("Not initialized. Run yep enable first.");
-	}
-	if (config.getProvider() === "openai") {
-		const key = config.resolveOpenAIKey();
-		if (!key) {
-			throw new Error("OpenAI API key not configured");
-		}
-		process.env.OPENAI_API_KEY = key;
-	}
-}
-
-async function doCodeSearch(query: string): Promise<CodeSearchHit[]> {
-	await ensureProvider();
-	const { embedText } = await import("./mem/core/embedder.ts");
-	const { searchCode } = await import("./mem/core/code-store.ts");
-	const vector = await embedText(query);
-	const results = await searchCode(vector, 15, { queryText: query });
-	return results.map((r) => ({
-		symbol: r.chunk.symbol,
-		symbolType: r.chunk.symbolType,
-		path: r.chunk.path,
-		body: r.chunk.body,
-		language: r.chunk.language,
-		calls: r.chunk.calls,
-		imports: r.chunk.imports,
-		score: r.score,
-	}));
-}
-
-async function loadCodeRelations(symbolName: string): Promise<{
-	callers: CodeRelation[];
-	callees: CodeRelation[];
-	importers: CodeRelation[];
-}> {
-	const { findCallers, findCallees, findImporters } = await import(
-		"./mem/core/code-store.ts"
-	);
-	const [callers, callees, importers] = await Promise.all([
-		findCallers(symbolName),
-		findCallees(symbolName),
-		findImporters(symbolName),
-	]);
-	const toRelation = (r: {
-		symbol: string;
-		symbolType: string;
-		path: string;
-	}): CodeRelation => ({
-		symbol: r.symbol,
-		symbolType: r.symbolType,
-		path: r.path,
-	});
-	return {
-		callers: callers.map(toRelation),
-		callees: callees.map(toRelation),
-		importers: importers.map(toRelation),
-	};
-}
-
-async function loadCodeStats(): Promise<CodeStats> {
-	try {
-		const { getCodeStats } = await import("./mem/core/code-store.ts");
-		return await getCodeStats();
-	} catch {
-		return { totalSymbols: 0, hasTable: false, languages: [] };
-	}
-}
 
 function StatusBar({ stats }: { stats: MemStats | null }) {
 	if (!stats) {

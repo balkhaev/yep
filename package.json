@@ -28,6 +28,7 @@
     "db:generate": "turbo -F @yep/db db:generate",
     "db:migrate": "turbo -F @yep/db db:migrate",
     "db:local": "turbo -F @yep/db db:local",
+    "test": "turbo test",
     "check": "ultracite check",
     "fix": "ultracite fix"
   },

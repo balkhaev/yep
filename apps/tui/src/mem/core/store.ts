@@ -1,6 +1,9 @@
 import { type Connection, connect, Index, type Table } from "@lancedb/lancedb";
 import { getStorePath, getVectorDimensions } from "../lib/config.ts";
+import { createLogger } from "../lib/logger.ts";
 import type { SolutionChunk } from "./chunker.ts";
+
+const log = createLogger("store");
 
 const TABLE_NAME = "solutions";
 
@@ -150,13 +153,17 @@ const MIGRATION_COLUMNS: Array<{ name: string; valueSql: string }> = [
 ];
 
 async function migrateSchema(table: Table): Promise<void> {
-	const schema = await table.schema();
-	const existingFields = new Set(schema.fields.map((f) => f.name));
-	const missing = MIGRATION_COLUMNS.filter(
-		(col) => !existingFields.has(col.name)
-	);
-	if (missing.length > 0) {
-		await table.addColumns(missing);
+	try {
+		const schema = await table.schema();
+		const existingFields = new Set(schema.fields.map((f) => f.name));
+		const missing = MIGRATION_COLUMNS.filter(
+			(col) => !existingFields.has(col.name)
+		);
+		if (missing.length > 0) {
+			await table.addColumns(missing);
+		}
+	} catch (err) {
+		log.warn("Schema migration failed", { error: String(err) });
 	}
 }
 
@@ -178,8 +185,8 @@ async function createFtsIndex(table: Table): Promise<void> {
 		await table.createIndex("embeddingText", {
 			config: Index.fts(),
 		});
-	} catch {
-		// FTS index creation may fail on empty tables or unsupported versions
+	} catch (err) {
+		log.debug("FTS index creation skipped", { error: String(err) });
 	}
 }
 
@@ -237,8 +244,11 @@ export async function upsertChunks(
 	for (const cpId of checkpointIds) {
 		try {
 			await table.delete(`"checkpointId" = '${escapeSql(cpId)}'`);
-		} catch {
-			// table may be empty
+		} catch (err) {
+			log.warn("Delete checkpoint failed", {
+				checkpointId: cpId,
+				error: String(err),
+			});
 		}
 	}
 
@@ -560,7 +570,10 @@ async function ftsSearch(
 			query = query.where(whereClause);
 		}
 		return (await query.toArray()) as Record<string, unknown>[];
-	} catch {
+	} catch (err) {
+		log.debug("FTS search failed, falling back to vector-only", {
+			error: String(err),
+		});
 		return [];
 	}
 }
@@ -647,17 +660,14 @@ export async function searchByFile(
 	}
 
 	const table = await getTable();
-	const rows = await table.query().select(RESULT_COLUMNS).limit(500).toArray();
+	const rows = await table
+		.query()
+		.where(`"filesChanged" LIKE '%${escapeSql(file)}%'`)
+		.select(RESULT_COLUMNS)
+		.limit(limit)
+		.toArray();
 
-	const needle = file.toLowerCase();
-	const matched = rows.filter((row) => {
-		const files = String(row.filesChanged ?? "").toLowerCase();
-		return files.includes(needle);
-	});
-
-	return matched
-		.slice(0, limit)
-		.map((row) => rowToResult(row as Record<string, unknown>));
+	return (rows as Record<string, unknown>[]).map(rowToResult);
 }
 
 export async function getIndexedChunkIds(): Promise<Set<string>> {
@@ -704,11 +714,7 @@ export async function getStats(): Promise<{
 	const table = await getTable();
 	const count = Number(await table.countRows());
 
-	const rows = await table
-		.query()
-		.select(["filesChanged", "agent"])
-		.limit(500)
-		.toArray();
+	const rows = await table.query().select(["filesChanged", "agent"]).toArray();
 
 	const fileCounts = new Map<string, number>();
 	const agentSet = new Set<string>();

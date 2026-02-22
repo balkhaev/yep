@@ -55,6 +55,7 @@ YEP_PROVIDER=ollama bunx yep-mem enable
 |---|---|
 | `yep enable` | Full setup: vector store, hooks, MCP, agent rules, initial index |
 | `yep sync` | Index new checkpoints + re-index changed code (auto via post-commit) |
+| `yep index-code` | Index code symbols (functions, classes, types) |
 | `yep search "..."` | Search past solutions |
 | `yep context "..."` | Output context for piping into prompts |
 | `yep diff <file>` | Memory timeline for a file |
@@ -65,6 +66,7 @@ YEP_PROVIDER=ollama bunx yep-mem enable
 | `yep api` | Start HTTP API server |
 | `yep gui` | Web dashboard in the browser |
 | `yep eval` | Search quality A/B evaluation |
+| `yep debug` | Debug tools for code index and search |
 | `yep` | Interactive TUI |
 
 ### Automatic Code Indexing
@@ -75,7 +77,19 @@ Code indexing is fully automatic — you never need to run it manually:
 - **`yep enable`** runs initial code index during setup
 - **`yep gui`** re-indexes in background when stale
 
-Supports TypeScript, JavaScript, Python, Go, Rust. Extracts functions, classes, interfaces, types, React components with call graphs and import tracking. Incremental — only re-indexes files changed since the last commit.
+Supports TypeScript, JavaScript, Python, Go, Rust. Uses the **TypeScript Compiler API** for TS/JS/TSX/JSX files (exact AST parsing), with a regex fallback for other languages. Extracts functions, classes, interfaces, types, React components with call graphs and import tracking. Incremental — only re-indexes files changed since the last commit.
+
+### Desktop App
+
+A native desktop app built with [Tauri 2](https://tauri.app):
+
+```bash
+cd apps/desktop
+bun run tauri:dev     # development
+bun run tauri:build   # production build
+```
+
+Dashboard with search, code browser, sync, file timeline, settings, and **code insights** — dead code detection, most connected symbols, complexity hotspots, language/type distribution.
 
 ### Web GUI
 
@@ -84,7 +98,7 @@ yep gui              # opens http://localhost:3838
 yep gui --port 4000  # custom port
 ```
 
-Dashboard with search, code browser, sync, file timeline, settings, and **code insights** — dead code detection, most connected symbols, complexity hotspots, language/type distribution.
+Same interface as the desktop app, served directly from the CLI.
 
 ## MCP Tools
 
@@ -106,47 +120,83 @@ Agent rules are installed at `.cursor/rules/yep-memory.mdc` — agents automatic
 
 ## How It Works
 
-**Session indexing** — parse Entire checkpoints → chunk into prompt/response pairs with diffs → LLM summaries → embed → store in LanceDB. Local sessions tracked by content hash (updated, not duplicated).
+**Session indexing** — parse Entire checkpoints → chunk into prompt/response pairs with diffs → LLM summaries → embed → store in LanceDB. Local sessions tracked by content hash (updated, not duplicated). Sync is protected by a file-based lock to prevent concurrent corruption.
 
-**Code indexing** — walk project files → regex-based symbol extraction with call/import graphs → embed → store in separate `code_symbols` table. Incremental by git commit.
+**Code indexing** — walk project files → TypeScript Compiler API for TS/JS (regex fallback for Python/Go/Rust) → symbol extraction with call/import graphs → embed → store in separate `code_symbols` table. Incremental by git commit.
 
 **Retrieval** — embed query → vector + full-text search in parallel → reciprocal rank fusion → rerank (recency, file overlap, keyword density, symbol matching) → deduplicate (cosine >0.95) → top-K results.
 
+**Error handling** — structured logging with levels and module context, exponential backoff with jitter for embedding API retries, retryable error detection (rate limits, timeouts, 5xx).
+
 ## Architecture
+
+```text
+yep/
+├── apps/
+│   ├── desktop/          Tauri 2 desktop app (React 19, TailwindCSS, TanStack Query)
+│   ├── tui/              CLI + MCP server + HTTP API (Bun, Hono, LanceDB)
+│   └── server/           AI inference server (Hono, Gemini)
+├── packages/
+│   ├── config/           Shared TypeScript configuration
+│   ├── db/               Prisma client (libSQL/Turso)
+│   └── env/              Environment variable validation (Zod)
+└── .github/
+    └── workflows/        CI (lint, types, test, build) + Release (npm + Tauri)
+```
 
 ```text
 .yep-mem/
 ├── vectors/         LanceDB (solutions + code_symbols tables)
 ├── cache/           Embedding + search result caches
 ├── eval/            Golden question set for quality eval
+├── sync.lock        File lock for sync atomicity
 └── config.json      Provider, models, sync state
 ```
 
 ## Built With
 
-[LanceDB](https://lancedb.com) · [AI SDK](https://ai-sdk.dev) · [Entire](https://entire.io) · [Ollama](https://ollama.com) · [MCP](https://modelcontextprotocol.io) · [Lefthook](https://github.com/evilmartians/lefthook) · [Bun](https://bun.sh)
+[LanceDB](https://lancedb.com) · [AI SDK](https://ai-sdk.dev) · [Entire](https://entire.io) · [Ollama](https://ollama.com) · [MCP](https://modelcontextprotocol.io) · [Tauri](https://tauri.app) · [TanStack Query](https://tanstack.com/query) · [Bun](https://bun.sh) · [Turborepo](https://turbo.build)
 
 ---
 
 <details>
-<summary>Monorepo development</summary>
-
-```text
-yep/
-├── apps/
-│   ├── desktop/     React web GUI (Vite + TailwindCSS)
-│   └── tui/         CLI + MCP server + API (Bun + Hono + LanceDB)
-├── bin/yep          Entry point
-└── scripts/
-    └── install.sh   Installer
-```
+<summary>Development</summary>
 
 ```bash
 bun install
 bun run dev           # all apps
+bun run build         # build everything
+bun run test          # run all tests
 bun run build:gui     # build GUI assets into apps/tui/gui-dist
+bun run check         # lint (Biome via Ultracite)
+bun run fix           # auto-fix lint issues
 ```
 
-Code quality: `bun x ultracite fix` (Biome).
+### Testing
+
+```bash
+bun run test                        # all tests via Turborepo
+cd apps/tui && bun test src/        # TUI tests only
+```
+
+67 unit tests covering core modules: code chunker, chunker, cache, store utilities, file locking.
+
+### Releasing
+
+Releases are automated via GitHub Actions:
+
+1. Tag a version: `git tag v0.2.0 && git push --tags`
+2. CI publishes `yep-mem` to npm
+3. CI builds Tauri desktop binaries for macOS (arm64 + x64), Linux, Windows
+4. Draft GitHub release is created with binaries attached
+
+The desktop app includes auto-update support via the Tauri updater plugin.
+
+### Code Quality
+
+- **Biome** + **Ultracite** for linting and formatting
+- **Lefthook** pre-commit hooks
+- **Strict TypeScript** (`strictNullChecks`, `noUncheckedIndexedAccess`)
+- **Dependabot** for automated dependency updates
 
 </details>
