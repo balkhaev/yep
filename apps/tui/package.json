@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",
-    "@lancedb/lancedb": "^0.16.0",
+    "@lancedb/lancedb": "^0.26.2",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@opentui/core": "^0.1.79",
     "@opentui/react": "^0.1.79",
