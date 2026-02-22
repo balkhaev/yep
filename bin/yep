@@ -9,4 +9,13 @@ while [ -L "$SOURCE" ]; do
 done
 REPO_ROOT="$(cd "$(dirname "$SOURCE")/.." && pwd)"
 
-exec bun "$REPO_ROOT/apps/tui/src/index.tsx" "$@"
+ENTRY="$REPO_ROOT/apps/tui/src/index.tsx"
+
+if command -v bun &>/dev/null; then
+  exec bun "$ENTRY" "$@"
+elif command -v npx &>/dev/null; then
+  exec npx tsx "$ENTRY" "$@"
+else
+  echo "Error: bun or node (npx) is required to run yep" >&2
+  exit 1
+fi

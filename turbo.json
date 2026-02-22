@@ -7,6 +7,10 @@
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": ["dist/**"]
     },
+    "build:gui": {
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["../tui/gui-dist/**"]
+    },
     "lint": {
       "dependsOn": ["^lint"]
     },

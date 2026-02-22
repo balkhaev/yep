@@ -54,8 +54,8 @@ export async function statusCommand(): Promise<void> {
 
 	if (stats.topFiles.length > 0) {
 		console.log("\n  Most touched files:");
-		for (const f of stats.topFiles.slice(0, 5)) {
-			console.log(`    \x1b[2m-\x1b[0m ${f}`);
+		for (const { file, count } of stats.topFiles.slice(0, 5)) {
+			console.log(`    \x1b[2m-\x1b[0m ${file}  \x1b[2m(${count} refs)\x1b[0m`);
 		}
 	}
 

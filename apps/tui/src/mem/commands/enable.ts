@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { initStore } from "../core/store.ts";
 import {
@@ -190,6 +190,63 @@ function setupCursorMcp(repoRoot: string): void {
 	ok("Registered MCP server in .cursor/mcp.json");
 }
 
+const YEP_MEMORY_RULE = `---
+description: "Agent rules for projects using yep-mem (agent memory). Automatically installed by yep enable."
+globs: "**/*"
+alwaysApply: true
+---
+
+# yep-mem: Agent Memory
+
+This project uses **yep-mem** for persistent agent memory. Follow these guidelines:
+
+## Before Starting Any Task
+
+1. Call \`search_solutions\` with a description of what you're about to do
+2. Call \`search_all\` if you need both code context and past session history
+3. Review returned past solutions for relevant patterns, pitfalls, and decisions
+
+## Before Editing a Function or Class
+
+1. Call \`symbol_context\` with the symbol name to understand:
+   - What calls this symbol (callers)
+   - What this symbol calls (callees)
+   - Who imports it
+   - Past sessions that touched it
+2. Consider the blast radius before making changes
+
+## Before Committing
+
+1. Call \`detect_changes\` to see which symbols your changes affect
+2. Review the blast radius and past session warnings
+3. Ensure you haven't broken callers or dependents
+
+## Available MCP Tools
+
+- \`search_solutions\` — Search past AI coding sessions
+- \`search_all\` — Unified search across sessions + indexed code
+- \`symbol_context\` — 360-degree view of a code symbol
+- \`detect_changes\` — Git diff → affected symbols → blast radius
+- \`mem_stats\` — Memory store statistics
+`;
+
+function setupAgentRules(repoRoot: string): void {
+	const rulesDir = join(repoRoot, ".cursor", "rules");
+	const rulePath = join(rulesDir, "yep-memory.mdc");
+
+	if (existsSync(rulePath)) {
+		const existing = readFileSync(rulePath, "utf-8");
+		if (existing.includes("yep-mem")) {
+			skipped("Agent rules already installed");
+			return;
+		}
+	}
+
+	mkdirSync(rulesDir, { recursive: true });
+	writeFileSync(rulePath, YEP_MEMORY_RULE);
+	ok("Installed agent rules in .cursor/rules/yep-memory.mdc");
+}
+
 async function runInitialSync(): Promise<void> {
 	const { chunkCheckpoints } = await import("../core/chunker.ts");
 	const { embedTexts } = await import("../core/embedder.ts");
@@ -302,18 +359,21 @@ export async function enableCommand(): Promise<void> {
 	setupGitignore(repoRoot);
 	setupLefthook(repoRoot);
 	setupCursorMcp(repoRoot);
+	setupAgentRules(repoRoot);
 
 	const provider = detectProvider();
 	const apiKey = provider === "openai" ? resolveOpenAIKey() : null;
 
 	writeConfig({
-		lastIndexedCommit: null,
-		openaiApiKey: apiKey ?? null,
 		createdAt: new Date().toISOString(),
 		embeddingModel: null,
+		lastCodeIndexCommit: null,
+		lastIndexedCommit: null,
 		localSyncOffsets: {},
 		ollamaBaseUrl: null,
+		openaiApiKey: apiKey ?? null,
 		provider,
+		scope: "",
 		summarizerModel: null,
 	});
 
@@ -340,6 +400,26 @@ export async function enableCommand(): Promise<void> {
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			warning(`Initial sync failed: ${msg}`);
+		}
+	}
+
+	if (apiKey || provider === "ollama") {
+		console.log("");
+		info("Indexing code symbols...");
+		try {
+			const { runCodeIndex } = await import("./index-code.ts");
+			const result = await runCodeIndex((msg) => info(msg));
+			if (result.skipped) {
+				skipped("No code files to index");
+			} else {
+				ok(
+					`Indexed ${result.totalSymbols} symbols from ${result.totalFiles} files`
+				);
+			}
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			warning(`Code indexing failed: ${msg}`);
+			hint("You can run 'yep index-code' manually later");
 		}
 	}
 

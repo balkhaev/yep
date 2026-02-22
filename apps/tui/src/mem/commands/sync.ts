@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { clearCache } from "../core/cache.ts";
 import type { SolutionChunk } from "../core/chunker.ts";
 import { chunkCheckpoints } from "../core/chunker.ts";
 import { embedTexts } from "../core/embedder.ts";
@@ -166,8 +167,27 @@ export async function syncCommand(): Promise<void> {
 	console.log("[info] Updating search index...");
 	await ensureFtsIndex();
 
+	clearCache();
+
 	const config = readConfig();
 	updateConfig({ lastIndexedCommit: config.lastIndexedCommit });
+
+	console.log("\nSession sync complete!");
+
+	console.log("\n[info] Running code index...");
+	try {
+		const codeResult = await runCodeIndex((msg) =>
+			console.log(`[code-index] ${msg}`)
+		);
+		if (!codeResult.skipped) {
+			console.log(
+				`[done] Code index: ${codeResult.totalSymbols} symbols from ${codeResult.totalFiles} files`
+			);
+		}
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		console.log(`[warn] Code indexing failed: ${msg}`);
+	}
 
 	console.log("\nSync complete!");
 }

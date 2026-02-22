@@ -8,11 +8,13 @@ const CONFIG_FILE = "config.json";
 const configSchema = z.object({
 	createdAt: z.string().default(""),
 	embeddingModel: z.string().nullable().default(null),
+	lastCodeIndexCommit: z.string().nullable().default(null),
 	lastIndexedCommit: z.string().nullable().default(null),
 	localSyncOffsets: z.record(z.string(), z.number()).default({}),
 	ollamaBaseUrl: z.string().nullable().default(null),
 	openaiApiKey: z.string().nullable().default(null),
 	provider: z.enum(["openai", "ollama"]).default("openai"),
+	scope: z.string().default(""),
 	summarizerModel: z.string().nullable().default(null),
 });
 

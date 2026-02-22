@@ -7,6 +7,10 @@
   "bin": {
     "yep": "./src/index.tsx"
   },
+  "files": [
+    "src",
+    "gui-dist"
+  ],
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "mem": "bun run src/index.tsx"
@@ -33,6 +37,7 @@
     "@opentui/react": "^0.1.79",
     "ai": "^6.0.3",
     "apache-arrow": "^19.0.1",
+    "hono": "^4.12.0",
     "ollama-ai-provider-v2": "^3.3.1",
     "react": "^19.2.4",
     "zod": "^4.1.13"

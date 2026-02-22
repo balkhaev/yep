@@ -7,60 +7,74 @@ const TABLE_NAME = "solutions";
 interface VectorRecord {
 	agent: string;
 	checkpointId: string;
+	confidence: number;
 	contentHash: string;
 	diffSummary: string;
 	embeddingText: string;
 	filesChanged: string;
 	id: string;
+	language: string;
 	prompt: string;
 	response: string;
+	scope: string;
 	sessionIndex: number;
+	source: string;
 	summary: string;
+	symbols: string;
 	timestamp: string;
 	tokensUsed: number;
 	vector: number[];
+	version: number;
 	[key: string]: unknown;
 }
 
 export interface SolutionResult {
 	agent: string;
 	checkpointId: string;
+	confidence: number;
 	diffSummary: string;
 	embeddingText: string;
 	filesChanged: string;
 	id: string;
+	language: string;
 	prompt: string;
 	response: string;
+	scope: string;
 	sessionIndex: number;
+	source: string;
 	summary: string;
+	symbols: string;
 	timestamp: string;
 	tokensUsed: number;
+	version: number;
 }
 
-interface SearchResult {
+export interface SearchResult {
 	chunk: SolutionResult;
 	score: number;
 }
 
 let cachedConnection: Connection | null = null;
 
-async function getConnection(): Promise<Connection> {
+export async function getConnection(): Promise<Connection> {
 	if (!cachedConnection) {
 		cachedConnection = await connect(getStorePath());
 	}
 	return cachedConnection;
 }
 
-let migrated = false;
+let tablePromise: Promise<Table> | null = null;
 
-async function getTable(): Promise<Table> {
-	const conn = await getConnection();
-	const table = await conn.openTable(TABLE_NAME);
-	if (!migrated) {
-		await migrateSchema(table);
-		migrated = true;
+function getTable(): Promise<Table> {
+	if (!tablePromise) {
+		tablePromise = (async () => {
+			const conn = await getConnection();
+			const table = await conn.openTable(TABLE_NAME);
+			await migrateSchema(table);
+			return table;
+		})();
 	}
-	return table;
+	return tablePromise;
 }
 
 async function tableExists(): Promise<boolean> {
@@ -88,6 +102,12 @@ function chunkToRecord(
 		tokensUsed: chunk.metadata.tokensUsed,
 		embeddingText: chunk.embeddingText,
 		contentHash,
+		source: chunk.metadata.source ?? "transcript",
+		confidence: chunk.metadata.confidence ?? 0.7,
+		scope: chunk.metadata.scope ?? "",
+		version: chunk.metadata.version ?? 1,
+		language: chunk.metadata.language ?? "",
+		symbols: chunk.metadata.symbols?.join(",") ?? "",
 		vector,
 	};
 }
@@ -107,23 +127,34 @@ function emptyRecord(): VectorRecord {
 		tokensUsed: 0,
 		embeddingText: "",
 		contentHash: "",
+		source: "transcript",
+		confidence: 0,
+		scope: "",
+		version: 0,
+		language: "",
+		symbols: "",
 		vector: new Array(getVectorDimensions()).fill(0) as number[],
 	};
 }
 
+const MIGRATION_COLUMNS: Array<{ name: string; valueSql: string }> = [
+	{ name: "summary", valueSql: "''" },
+	{ name: "contentHash", valueSql: "''" },
+	{ name: "embeddingText", valueSql: "''" },
+	{ name: "source", valueSql: "'transcript'" },
+	{ name: "confidence", valueSql: "0.7" },
+	{ name: "scope", valueSql: "''" },
+	{ name: "version", valueSql: "1" },
+	{ name: "language", valueSql: "''" },
+	{ name: "symbols", valueSql: "''" },
+];
+
 async function migrateSchema(table: Table): Promise<void> {
 	const schema = await table.schema();
 	const existingFields = new Set(schema.fields.map((f) => f.name));
-	const missing: { name: string; valueSql: string }[] = [];
-	if (!existingFields.has("summary")) {
-		missing.push({ name: "summary", valueSql: "''" });
-	}
-	if (!existingFields.has("contentHash")) {
-		missing.push({ name: "contentHash", valueSql: "''" });
-	}
-	if (!existingFields.has("embeddingText")) {
-		missing.push({ name: "embeddingText", valueSql: "''" });
-	}
+	const missing = MIGRATION_COLUMNS.filter(
+		(col) => !existingFields.has(col.name)
+	);
 	if (missing.length > 0) {
 		await table.addColumns(missing);
 	}
@@ -244,6 +275,12 @@ function rowToResult(row: Record<string, unknown>): SolutionResult {
 		filesChanged: row.filesChanged as string,
 		tokensUsed: row.tokensUsed as number,
 		embeddingText: row.embeddingText as string,
+		source: (row.source as string) ?? "transcript",
+		confidence: (row.confidence as number) ?? 0.7,
+		scope: (row.scope as string) ?? "",
+		version: (row.version as number) ?? 1,
+		language: (row.language as string) ?? "",
+		symbols: (row.symbols as string) ?? "",
 	};
 }
 
@@ -294,22 +331,151 @@ function deduplicateResults(
 	return kept;
 }
 
+export interface SearchFilter {
+	agent?: string;
+	files?: string[];
+	minScore?: number;
+	queryText?: string;
+	rerank?: boolean;
+}
+
+const RECENCY_HALF_LIFE_DAYS = 14;
+
+function computeRecencyBoost(timestamp: string): number {
+	if (!timestamp) {
+		return 0;
+	}
+	const ts = new Date(timestamp).getTime();
+	if (Number.isNaN(ts)) {
+		return 0;
+	}
+	const ageDays = (Date.now() - ts) / (1000 * 60 * 60 * 24);
+	return Math.exp((-Math.LN2 * ageDays) / RECENCY_HALF_LIFE_DAYS);
+}
+
+function computeFileOverlap(
+	filesChanged: string,
+	filterFiles: string[]
+): number {
+	if (filterFiles.length === 0 || !filesChanged) {
+		return 0;
+	}
+	const stored = filesChanged.toLowerCase();
+	let matches = 0;
+	for (const f of filterFiles) {
+		if (stored.includes(f.toLowerCase())) {
+			matches++;
+		}
+	}
+	return matches / filterFiles.length;
+}
+
+const TOKEN_SPLIT_RE = /[\s/.,;:!?()[\]{}<>'"=+\-*&#@|\\`~^]+/;
+
+function tokenize(text: string): string[] {
+	return text
+		.toLowerCase()
+		.split(TOKEN_SPLIT_RE)
+		.filter((t) => t.length > 2);
+}
+
+function computeKeywordDensity(
+	queryText: string,
+	prompt: string,
+	summary: string,
+	embeddingText: string
+): number {
+	const queryTokens = tokenize(queryText);
+	if (queryTokens.length === 0) {
+		return 0;
+	}
+	const haystack = `${prompt} ${summary} ${embeddingText}`.toLowerCase();
+	let hits = 0;
+	for (const token of queryTokens) {
+		if (haystack.includes(token)) {
+			hits++;
+		}
+	}
+	return hits / queryTokens.length;
+}
+
+const ALPHA_START_RE = /^[A-Za-z]/;
+const SYMBOL_PATTERN =
+	/(?:function|class|interface|type|const|let|var|export)\s+(\w{3,})/g;
+
+function computeSymbolMatch(queryText: string, embeddingText: string): number {
+	const querySymbols = new Set<string>();
+	for (const m of queryText.matchAll(SYMBOL_PATTERN)) {
+		if (m[1]) {
+			querySymbols.add(m[1].toLowerCase());
+		}
+	}
+	const freeformNames = tokenize(queryText).filter(
+		(t) => t.length >= 4 && ALPHA_START_RE.test(t)
+	);
+	for (const n of freeformNames) {
+		querySymbols.add(n.toLowerCase());
+	}
+	if (querySymbols.size === 0) {
+		return 0;
+	}
+
+	const textLower = embeddingText.toLowerCase();
+	let hits = 0;
+	for (const sym of querySymbols) {
+		if (textLower.includes(sym)) {
+			hits++;
+		}
+	}
+	return hits / querySymbols.size;
+}
+
+const RERANK_WEIGHTS = {
+	recency: 0.15,
+	fileOverlap: 0.25,
+	keywordDensity: 0.35,
+	symbolMatch: 0.25,
+};
+
+function rerankResults(
+	results: SearchResult[],
+	queryText: string,
+	filterFiles: string[]
+): SearchResult[] {
+	return results
+		.map((r) => {
+			const recency = computeRecencyBoost(r.chunk.timestamp);
+			const fileOverlap = computeFileOverlap(r.chunk.filesChanged, filterFiles);
+			const keywords = computeKeywordDensity(
+				queryText,
+				r.chunk.prompt,
+				r.chunk.summary,
+				r.chunk.embeddingText
+			);
+			const symbols = computeSymbolMatch(queryText, r.chunk.embeddingText);
+
+			const boost =
+				RERANK_WEIGHTS.recency * recency +
+				RERANK_WEIGHTS.fileOverlap * fileOverlap +
+				RERANK_WEIGHTS.keywordDensity * keywords +
+				RERANK_WEIGHTS.symbolMatch * symbols;
+
+			return { ...r, score: r.score * (1 + boost) };
+		})
+		.sort((a, b) => b.score - a.score);
+}
+
 export async function searchSolutions(
 	queryVector: number[],
 	topK = 3,
-	filter?: {
-		agent?: string;
-		files?: string[];
-		queryText?: string;
-		minScore?: number;
-	}
+	filter?: SearchFilter
 ): Promise<SearchResult[]> {
 	if (!(await tableExists())) {
 		return [];
 	}
 
 	const table = await getTable();
-	const fetchK = topK * 3;
+	const fetchK = Math.max(topK * 5, 50);
 
 	let whereClause: string | undefined;
 	if (filter?.agent) {
@@ -354,12 +520,17 @@ export async function searchSolutions(
 	}));
 
 	const resultVectors = results.map((row) => (row.vector as number[]) ?? []);
-
 	const deduped = deduplicateResults(searchResults, resultVectors);
+
+	const shouldRerank = filter?.rerank !== false;
+	const ranked =
+		shouldRerank && filter?.queryText
+			? rerankResults(deduped, filter.queryText, filter.files ?? [])
+			: deduped;
 
 	const minScore = filter?.minScore ?? 0;
 	const filtered =
-		minScore > 0 ? deduped.filter((r) => r.score >= minScore) : deduped;
+		minScore > 0 ? ranked.filter((r) => r.score >= minScore) : ranked;
 
 	return filtered.slice(0, topK);
 }
@@ -430,6 +601,22 @@ function mergeWithRRF(
 		.map((e) => ({ ...e.row, _rrfScore: e.score }));
 }
 
+export async function vectorOnlySearchSolutions(
+	queryVector: number[],
+	topK = 3,
+	whereClause?: string
+): Promise<SearchResult[]> {
+	if (!(await tableExists())) {
+		return [];
+	}
+	const table = await getTable();
+	const rows = await vectorOnlySearch(table, queryVector, topK, whereClause);
+	return rows.map((row) => ({
+		chunk: rowToResult(row),
+		score: row._distance != null ? 1 - (row._distance as number) : 0,
+	}));
+}
+
 const RESULT_COLUMNS = [
 	"id",
 	"checkpointId",
@@ -443,6 +630,12 @@ const RESULT_COLUMNS = [
 	"filesChanged",
 	"tokensUsed",
 	"embeddingText",
+	"source",
+	"confidence",
+	"scope",
+	"version",
+	"language",
+	"symbols",
 ];
 
 export async function searchByFile(
@@ -501,7 +694,7 @@ export async function getContentHash(
 export async function getStats(): Promise<{
 	totalChunks: number;
 	hasTable: boolean;
-	topFiles: string[];
+	topFiles: Array<{ file: string; count: number }>;
 	agents: string[];
 }> {
 	if (!(await tableExists())) {
@@ -509,7 +702,7 @@ export async function getStats(): Promise<{
 	}
 
 	const table = await getTable();
-	const count = await table.countRows();
+	const count = Number(await table.countRows());
 
 	const rows = await table
 		.query()
@@ -537,7 +730,7 @@ export async function getStats(): Promise<{
 	const topFiles = [...fileCounts.entries()]
 		.sort((a, b) => b[1] - a[1])
 		.slice(0, 10)
-		.map(([f]) => f);
+		.map(([file, count]) => ({ file, count }));
 
 	return {
 		totalChunks: count,
@@ -545,6 +738,116 @@ export async function getStats(): Promise<{
 		topFiles,
 		agents: [...agentSet],
 	};
+}
+
+export type SearchSource = "all" | "code" | "transcript";
+
+export interface UnifiedResult {
+	body?: string;
+	filesChanged?: string;
+	id: string;
+	path?: string;
+	prompt?: string;
+	response?: string;
+	score: number;
+	source: SearchSource;
+	summary: string;
+	symbol?: string;
+	symbolType?: string;
+	timestamp?: string;
+}
+
+export async function unifiedSearch(
+	queryVector: number[],
+	topK = 5,
+	filter?: SearchFilter & { source?: SearchSource }
+): Promise<UnifiedResult[]> {
+	const source = filter?.source ?? "all";
+	const results: UnifiedResult[] = [];
+
+	if (source === "all" || source === "transcript") {
+		const transcriptResults = await searchSolutions(
+			queryVector,
+			topK * 2,
+			filter
+		);
+		for (const r of transcriptResults) {
+			results.push({
+				score: r.score,
+				source: "transcript",
+				id: r.chunk.id,
+				summary: r.chunk.summary || r.chunk.prompt.slice(0, 200),
+				prompt: r.chunk.prompt,
+				response: r.chunk.response,
+				filesChanged: r.chunk.filesChanged,
+				timestamp: r.chunk.timestamp,
+			});
+		}
+	}
+
+	if (source === "all" || source === "code") {
+		try {
+			const { searchCode } = await import("./code-store.ts");
+			const codeResults = await searchCode(queryVector, topK * 2, {
+				queryText: filter?.queryText,
+			});
+			for (const r of codeResults) {
+				results.push({
+					score: r.score,
+					source: "code",
+					id: r.chunk.id,
+					summary: r.chunk.summary,
+					body: r.chunk.body,
+					path: r.chunk.path,
+					symbol: r.chunk.symbol,
+					symbolType: r.chunk.symbolType,
+				});
+			}
+		} catch {
+			// code_symbols table may not exist yet
+		}
+	}
+
+	if (source === "all") {
+		const TRANSCRIPT_WEIGHT = 1.0;
+		const CODE_WEIGHT = 0.85;
+		for (const r of results) {
+			r.score *= r.source === "transcript" ? TRANSCRIPT_WEIGHT : CODE_WEIGHT;
+		}
+	}
+
+	results.sort((a, b) => b.score - a.score);
+	return results.slice(0, topK);
+}
+
+export async function getRecentSessions(limit = 10): Promise<
+	Array<{
+		agent: string;
+		filesChanged: string;
+		summary: string;
+		timestamp: string;
+	}>
+> {
+	if (!(await tableExists())) {
+		return [];
+	}
+	const table = await getTable();
+	const rows = await table
+		.query()
+		.select(["summary", "timestamp", "agent", "filesChanged"])
+		.limit(200)
+		.toArray();
+
+	return (rows as Record<string, unknown>[])
+		.map((r) => ({
+			summary: (r.summary as string) || "",
+			timestamp: (r.timestamp as string) || "",
+			agent: (r.agent as string) || "",
+			filesChanged: (r.filesChanged as string) || "",
+		}))
+		.filter((r) => r.timestamp)
+		.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+		.slice(0, limit);
 }
 
 export async function dropTable(): Promise<boolean> {

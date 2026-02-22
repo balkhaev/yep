@@ -6,6 +6,7 @@ import {
 	getOllamaBaseUrl,
 	getProvider,
 } from "../lib/config.ts";
+import { getCachedEmbedding, setCachedEmbedding } from "./cache.ts";
 
 const MAX_RETRIES = 3;
 
@@ -21,13 +22,23 @@ function resolveModel() {
 	return openai.embeddingModel(modelName);
 }
 
-export async function embedText(text: string): Promise<number[]> {
+async function embedTextRaw(text: string): Promise<number[]> {
 	const { embedding } = await embed({
 		model: resolveModel(),
 		value: text,
 		maxRetries: MAX_RETRIES,
 	});
 	return embedding;
+}
+
+export async function embedText(text: string): Promise<number[]> {
+	const cached = getCachedEmbedding(text);
+	if (cached) {
+		return cached;
+	}
+	const vector = await embedTextRaw(text);
+	setCachedEmbedding(text, vector);
+	return vector;
 }
 
 export interface EmbedProgress {
