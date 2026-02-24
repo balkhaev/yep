@@ -1,0 +1,4 @@
+Directory
+Users/balkhaev\
+\
+хотя мы в ~/mycode/yep
