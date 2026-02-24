@@ -23,9 +23,9 @@ export interface SolutionChunk {
 	summary?: string;
 }
 
-const MAX_RESPONSE_LENGTH = 2000;
-const MAX_DIFF_LENGTH = 1000;
-const MAX_EMBEDDING_TEXT_LENGTH = 4000;
+const MAX_RESPONSE_LENGTH = 4000;
+const MAX_DIFF_LENGTH = 1500;
+const MAX_EMBEDDING_TEXT_LENGTH = 5000;
 const MAX_SYMBOLS = 30;
 
 const FILE_PATTERN =
@@ -42,6 +42,39 @@ const FALSE_POSITIVE_FILES = new Set([
 	"bun.js",
 	"deno.js",
 ]);
+
+const SYSTEM_TAG_RE =
+	/<(?:system_reminder|user_info|rules|agent_skills|open_and_recently_viewed_files|git_status|agent_transcripts|always_applied_workspace_rules?|always_applied_workspace_rule|available_skills|agent_skill|mcp_file_system|mcp_file_system_servers?|mcp_file_system_server|terminal_files_information|tone_and_style|tool_calling|making_code_changes|citing_code|inline_line_numbers|task_management|committing-changes-with-git|creating-pull-requests|managing-long-running-commands|linter_errors|no_thinking_in_code_or_commands|mode_selection|mermaid_syntax|other-common-operations)[^>]*>[\s\S]*?<\/[^>]+>/gi;
+
+const FILE_TREE_LINE_RE =
+	/^[ │├└─\s]*[\w/.-]+\.(ts|tsx|js|jsx|json|md|css|py|go|rs)\s*$/;
+
+export function cleanPrompt(raw: string): string {
+	let text = raw.replace(SYSTEM_TAG_RE, "");
+
+	const lines = text.split("\n");
+	const kept: string[] = [];
+	let consecutivePathLines = 0;
+
+	for (const line of lines) {
+		if (FILE_TREE_LINE_RE.test(line.trim())) {
+			consecutivePathLines++;
+			if (consecutivePathLines > 3) {
+				continue;
+			}
+		} else {
+			consecutivePathLines = 0;
+		}
+		kept.push(line);
+	}
+
+	text = kept
+		.join("\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+
+	return text || raw.slice(0, 500);
+}
 
 const SYMBOL_EXTRACT_RE =
 	/(?:export\s+)?(?:async\s+)?(?:function|class|interface|type|const|let)\s+(\w{3,})/g;
@@ -64,7 +97,7 @@ function extractConversationPairs(
 			pendingUserMessages.push(content);
 		} else if (entry.role === "assistant" && pendingUserMessages.length > 0) {
 			pairs.push({
-				prompt: pendingUserMessages.join("\n\n"),
+				prompt: cleanPrompt(pendingUserMessages.join("\n\n")),
 				response: content,
 			});
 			pendingUserMessages.length = 0;
@@ -74,28 +107,71 @@ function extractConversationPairs(
 	return pairs;
 }
 
+const DIFF_INDICATORS = ["diff", "+++", "---"];
+const CODE_CHANGE_INDICATORS = [
+	"Write to file",
+	"Created file",
+	"Modified file",
+	"old_string",
+	"new_string",
+	"StrReplace",
+	"Wrote to",
+	"Updated file",
+];
+
+function looksLikeCodeChange(content: string): boolean {
+	for (const indicator of DIFF_INDICATORS) {
+		if (content.includes(indicator)) {
+			return true;
+		}
+	}
+	for (const indicator of CODE_CHANGE_INDICATORS) {
+		if (content.includes(indicator)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 function extractDiffFromTranscript(
 	transcript: SessionTranscriptEntry[]
 ): string {
 	const diffs: string[] = [];
 
 	for (const entry of transcript) {
-		if (entry.role !== "tool") {
+		if (entry.role !== "tool" && entry.role !== "assistant") {
 			continue;
 		}
 
 		const content = typeof entry.content === "string" ? entry.content : "";
+		if (!content) {
+			continue;
+		}
 
-		if (
-			content.includes("diff") ||
-			content.includes("+++") ||
-			content.includes("---")
-		) {
+		if (entry.role === "tool" && looksLikeCodeChange(content)) {
 			diffs.push(content.slice(0, MAX_DIFF_LENGTH));
+			continue;
+		}
+
+		if (entry.role === "assistant") {
+			const lines = content.split("\n");
+			const changeLines: string[] = [];
+			for (const line of lines) {
+				if (
+					/^[+-]\s*(?:export\s+)?(?:async\s+)?(?:function|class|interface|type|const|let|import)\s/.test(
+						line
+					)
+				) {
+					changeLines.push(line);
+				}
+			}
+			if (changeLines.length > 0) {
+				diffs.push(changeLines.join("\n").slice(0, MAX_DIFF_LENGTH));
+			}
 		}
 	}
 
-	return diffs.join("\n").slice(0, MAX_DIFF_LENGTH);
+	return diffs.join("\n").slice(0, MAX_DIFF_LENGTH * 2);
 }
 
 function extractFilesChanged(transcript: SessionTranscriptEntry[]): string[] {
@@ -237,9 +313,10 @@ export function chunkCheckpoint(checkpoint: ParsedCheckpoint): SolutionChunk[] {
 		const language = detectLanguage(filesChanged);
 
 		if (pairs.length === 0 && session.prompts) {
+			const cleaned = cleanPrompt(session.prompts);
 			const symbols = extractAllSymbols(
 				session.transcript,
-				session.prompts,
+				cleaned,
 				"",
 				diffSummary
 			);
@@ -247,7 +324,7 @@ export function chunkCheckpoint(checkpoint: ParsedCheckpoint): SolutionChunk[] {
 				id: `${checkpoint.id}-${session.sessionIndex}-0`,
 				checkpointId: checkpoint.id,
 				sessionIndex: session.sessionIndex,
-				prompt: session.prompts,
+				prompt: cleaned,
 				response: "",
 				diffSummary,
 				metadata: {
@@ -258,12 +335,7 @@ export function chunkCheckpoint(checkpoint: ParsedCheckpoint): SolutionChunk[] {
 					symbols,
 					language,
 				},
-				embeddingText: buildEmbeddingText(
-					session.prompts,
-					"",
-					diffSummary,
-					symbols
-				),
+				embeddingText: buildEmbeddingText(cleaned, "", diffSummary, symbols),
 			});
 			continue;
 		}

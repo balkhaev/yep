@@ -7,6 +7,7 @@ import {
 	getProvider,
 } from "../lib/config.ts";
 import { createLogger } from "../lib/logger.ts";
+import { withRetry } from "../lib/retry.ts";
 import { getCachedEmbedding, setCachedEmbedding } from "./cache.ts";
 
 const log = createLogger("embedder");
@@ -25,7 +26,7 @@ function resolveModel() {
 }
 
 async function embedTextRaw(text: string): Promise<number[]> {
-	return withRetry(
+	return await withRetry(
 		async () => {
 			const { embedding } = await embed({
 				model: resolveModel(),
@@ -70,14 +71,44 @@ export async function embedTexts(
 		return embedTextsSequential(texts, progress);
 	}
 
-	const { embeddings } = await embedMany({
-		model: resolveModel(),
-		values: texts,
-		maxRetries: MAX_RETRIES,
-	});
+	const results: number[][] = new Array(texts.length);
+	const uncachedIndices: number[] = [];
+	const uncachedTexts: string[] = [];
+
+	for (let i = 0; i < texts.length; i++) {
+		const text = texts[i];
+		if (!text) {
+			continue;
+		}
+		const cached = getCachedEmbedding(text);
+		if (cached) {
+			results[i] = cached;
+		} else {
+			uncachedIndices.push(i);
+			uncachedTexts.push(text);
+		}
+	}
+
+	if (uncachedTexts.length > 0) {
+		const { embeddings } = await embedMany({
+			model: resolveModel(),
+			values: uncachedTexts,
+			maxRetries: MAX_RETRIES,
+		});
+
+		for (let j = 0; j < uncachedIndices.length; j++) {
+			const idx = uncachedIndices[j];
+			const vec = embeddings[j];
+			const text = uncachedTexts[j];
+			if (idx !== undefined && vec && text) {
+				results[idx] = vec;
+				setCachedEmbedding(text, vec);
+			}
+		}
+	}
 
 	progress?.onBatchComplete?.(texts.length, texts.length);
-	return embeddings;
+	return results;
 }
 
 async function embedTextsSequential(

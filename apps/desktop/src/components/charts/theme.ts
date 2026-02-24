@@ -32,6 +32,12 @@ export const TYPE_CHART_COLORS: Record<string, string> = {
 	type: CHART_COLORS.pink,
 };
 
+export const SEVERITY_COLORS: Record<string, string> = {
+	critical: CHART_COLORS.red,
+	warning: CHART_COLORS.amber,
+	info: CHART_COLORS.blue,
+};
+
 export const LANG_CHART_COLORS: Record<string, string> = {
 	typescript: CHART_COLORS.blue,
 	javascript: CHART_COLORS.amber,

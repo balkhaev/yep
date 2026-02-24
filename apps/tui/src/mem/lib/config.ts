@@ -61,14 +61,20 @@ function getConfigPath(): string {
 	return join(getMemDir(), CONFIG_FILE);
 }
 
+let cachedConfig: MemConfig | null = null;
+
 export function readConfig(): MemConfig {
+	if (cachedConfig) {
+		return cachedConfig;
+	}
 	const path = getConfigPath();
 	if (!existsSync(path)) {
 		return { ...DEFAULT_CONFIG };
 	}
 	try {
 		const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
-		return configSchema.parse(raw);
+		cachedConfig = configSchema.parse(raw);
+		return cachedConfig;
 	} catch {
 		return { ...DEFAULT_CONFIG };
 	}
@@ -77,11 +83,16 @@ export function readConfig(): MemConfig {
 export function writeConfig(config: MemConfig): void {
 	ensureMemDir();
 	writeFileSync(getConfigPath(), JSON.stringify(config, null, "\t"));
+	cachedConfig = config;
 }
 
 export function updateConfig(partial: Partial<MemConfig>): void {
 	const current = readConfig();
 	writeConfig({ ...current, ...partial });
+}
+
+export function invalidateConfigCache(): void {
+	cachedConfig = null;
 }
 
 export function isInitialized(): boolean {

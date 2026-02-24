@@ -1,6 +1,7 @@
 import { type Connection, connect, Index, type Table } from "@lancedb/lancedb";
 import { getStorePath, getVectorDimensions } from "../lib/config.ts";
 import { createLogger } from "../lib/logger.ts";
+import { escapeSql } from "../lib/sql.ts";
 import type { SolutionChunk } from "./chunker.ts";
 
 const log = createLogger("store");
@@ -267,10 +268,6 @@ export async function upsertChunks(
 
 type RankedRow = Record<string, unknown> & { _rrfScore?: number };
 
-function escapeSql(value: string): string {
-	return value.replace(/\\/g, "\\\\").replace(/'/g, "''").replace(/\0/g, "");
-}
-
 function rowToResult(row: Record<string, unknown>): SolutionResult {
 	return {
 		id: row.id as string,
@@ -491,13 +488,6 @@ export async function searchSolutions(
 	if (filter?.agent) {
 		whereClause = `agent = '${escapeSql(filter.agent)}'`;
 	}
-	if (filter?.files && filter.files.length > 0) {
-		const fileConditions = filter.files
-			.map((f) => `"filesChanged" LIKE '%${escapeSql(f)}%'`)
-			.join(" OR ");
-		const fileWhere = `(${fileConditions})`;
-		whereClause = whereClause ? `${whereClause} AND ${fileWhere}` : fileWhere;
-	}
 
 	const vectorResults = await vectorOnlySearch(
 		table,
@@ -520,6 +510,14 @@ export async function searchSolutions(
 			...row,
 			_rrfScore: row._distance != null ? 1 - (row._distance as number) : 0,
 		}));
+	}
+
+	if (filter?.files && filter.files.length > 0) {
+		const needles = filter.files.map((f) => f.toLowerCase());
+		results = results.filter((row) => {
+			const fc = (row.filesChanged as string)?.toLowerCase() ?? "";
+			return needles.some((n) => fc.includes(n));
+		});
 	}
 
 	const searchResults: SearchResult[] = results.map((row) => ({
@@ -660,14 +658,16 @@ export async function searchByFile(
 	}
 
 	const table = await getTable();
-	const rows = await table
-		.query()
-		.where(`"filesChanged" LIKE '%${escapeSql(file)}%'`)
-		.select(RESULT_COLUMNS)
-		.limit(limit)
-		.toArray();
+	const needle = file.toLowerCase();
+	const rows = await table.query().select(RESULT_COLUMNS).limit(5000).toArray();
 
-	return (rows as Record<string, unknown>[]).map(rowToResult);
+	return (rows as Record<string, unknown>[])
+		.filter((r) => {
+			const fc = r.filesChanged as string | undefined;
+			return fc?.toLowerCase().includes(needle);
+		})
+		.slice(0, limit)
+		.map(rowToResult);
 }
 
 export async function getIndexedChunkIds(): Promise<Set<string>> {
@@ -714,7 +714,11 @@ export async function getStats(): Promise<{
 	const table = await getTable();
 	const count = Number(await table.countRows());
 
-	const rows = await table.query().select(["filesChanged", "agent"]).toArray();
+	const rows = await table
+		.query()
+		.select(["filesChanged", "agent"])
+		.limit(5000)
+		.toArray();
 
 	const fileCounts = new Map<string, number>();
 	const agentSet = new Set<string>();

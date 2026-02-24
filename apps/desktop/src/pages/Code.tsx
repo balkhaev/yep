@@ -77,6 +77,27 @@ function RelationSection({
 	);
 }
 
+function CopyButton({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false);
+	return (
+		<button
+			className={`rounded-lg px-2 py-1 text-[10px] transition-colors ${
+				copied
+					? "bg-emerald-500/10 text-emerald-400"
+					: "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+			}`}
+			onClick={() => {
+				navigator.clipboard.writeText(text);
+				setCopied(true);
+				setTimeout(() => setCopied(false), 2000);
+			}}
+			type="button"
+		>
+			{copied ? "Copied!" : "Copy"}
+		</button>
+	);
+}
+
 function SymbolDetailPanel({
 	loading,
 	context,
@@ -106,34 +127,68 @@ function SymbolDetailPanel({
 		);
 	}
 
+	const { definition } = context;
 	const hasRelations =
 		context.callers.length > 0 ||
 		context.callees.length > 0 ||
 		context.importers.length > 0;
+
+	const commitShort = definition.commit ? definition.commit.slice(0, 7) : null;
+	const lastMod = definition.lastModified
+		? new Date(definition.lastModified).toLocaleDateString("en-US", {
+				month: "short",
+				day: "numeric",
+				year: "numeric",
+			})
+		: null;
+	const lineCount = definition.body ? definition.body.split("\n").length : 0;
 
 	return (
 		<div className="w-1/2 space-y-4">
 			<div className="card fade-in-up space-y-4 p-5">
 				<div>
 					<div className="mb-2 flex items-center gap-2">
-						<SymbolTypeBadge type={context.definition.symbolType} />
+						<SymbolTypeBadge type={definition.symbolType} />
 						<span className="font-mono font-semibold text-sm text-zinc-200">
-							{context.definition.symbol}
+							{definition.symbol}
 						</span>
-						<span className="badge ml-auto">{context.definition.language}</span>
+						<span className="badge ml-auto">{definition.language}</span>
 					</div>
 					<p className="font-mono text-[11px] text-zinc-600">
-						{context.definition.path}
+						{definition.path}
 					</p>
+					<div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-600">
+						{commitShort && (
+							<span className="rounded-md bg-zinc-800/60 px-1.5 py-0.5 font-mono">
+								{commitShort}
+							</span>
+						)}
+						{lastMod && (
+							<span className="rounded-md bg-zinc-800/60 px-1.5 py-0.5">
+								{lastMod}
+							</span>
+						)}
+						{lineCount > 0 && (
+							<span className="rounded-md bg-zinc-800/60 px-1.5 py-0.5">
+								{lineCount} lines
+							</span>
+						)}
+					</div>
 				</div>
+
+				{definition.summary && (
+					<p className="text-[13px] text-zinc-400 leading-relaxed">
+						{definition.summary}
+					</p>
+				)}
 
 				{hasRelations && (
 					<DependencyGraph
 						callees={context.callees}
 						callers={context.callers}
 						center={{
-							symbol: context.definition.symbol,
-							symbolType: context.definition.symbolType,
+							symbol: definition.symbol,
+							symbolType: definition.symbolType,
 						}}
 						importers={context.importers}
 						onSelect={onSelectSymbol}
@@ -141,10 +196,18 @@ function SymbolDetailPanel({
 					/>
 				)}
 
-				{context.definition.body && (
-					<pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-xl bg-zinc-950/80 p-4 font-mono text-xs text-zinc-300 leading-relaxed">
-						{context.definition.body}
-					</pre>
+				{definition.body && (
+					<div>
+						<div className="mb-2 flex items-center justify-between">
+							<p className="font-semibold text-[11px] text-zinc-600 uppercase tracking-widest">
+								Source
+							</p>
+							<CopyButton text={definition.body} />
+						</div>
+						<pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-xl bg-zinc-950/80 p-4 font-mono text-xs text-zinc-300 leading-relaxed">
+							{definition.body}
+						</pre>
+					</div>
 				)}
 
 				<RelationSection

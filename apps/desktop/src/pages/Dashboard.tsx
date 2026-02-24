@@ -1,5 +1,11 @@
 import { useNavigate } from "react-router-dom";
-import type { CodeInsights, RecentSession } from "@/api";
+import type {
+	CodeInsights,
+	CodeStats,
+	FileInfo,
+	RecentSession,
+	StatusResponse,
+} from "@/api";
 import DonutChart from "@/components/charts/DonutChart";
 import HorizontalBarChart from "@/components/charts/HorizontalBarChart";
 import MiniAreaChart from "@/components/charts/MiniAreaChart";
@@ -103,9 +109,12 @@ function prepareDashboardData(
 			color: LANG_CHART_COLORS[l.language],
 		})) ?? [];
 
-	const sparklineData = recent.map((_s, i) => ({
-		value: 10 + ((i * 17 + 7) % 40),
-	}));
+	const sparklineData = recent.map((sess) => {
+		const fileCount = sess.filesChanged
+			? sess.filesChanged.split(",").filter(Boolean).length
+			: 0;
+		return { value: Math.max(fileCount, 1) };
+	});
 
 	const connectedBarData =
 		insights?.mostConnected.slice(0, 5).map((s) => ({
@@ -188,7 +197,11 @@ function DashboardContent({
 					value={config?.provider === "openai" ? "OpenAI" : "Ollama"}
 				/>
 				<StatusCard
-					detail={codeStats?.languages.join(", ") || "run yep index-code"}
+					detail={
+						insights
+							? `${insights.deadCode.length} potential dead`
+							: codeStats?.languages.join(", ") || "run yep index-code"
+					}
 					label="Symbols"
 					value={codeStats?.totalSymbols ?? 0}
 				/>
@@ -205,9 +218,16 @@ function DashboardContent({
 						</p>
 						<div className="space-y-1">
 							{recent.map((s, i) => (
-								<div
-									className={`fade-in-up flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-zinc-800/40 stagger-${Math.min(i + 1, 8)}`}
+								<button
+									className={`fade-in-up flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-zinc-800/40 stagger-${Math.min(i + 1, 8)}`}
 									key={`${s.timestamp}-${i}`}
+									onClick={() => {
+										const q = s.summary || "";
+										if (q) {
+											navigate(`/search?q=${encodeURIComponent(q)}`);
+										}
+									}}
+									type="button"
 								>
 									<div
 										className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
@@ -241,7 +261,7 @@ function DashboardContent({
 											)}
 										</div>
 									</div>
-								</div>
+								</button>
 							))}
 						</div>
 					</div>

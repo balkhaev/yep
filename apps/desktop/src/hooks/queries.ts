@@ -5,6 +5,7 @@ export const queryKeys = {
 	status: ["status"] as const,
 	codeStats: ["code", "stats"] as const,
 	codeInsights: ["code", "insights"] as const,
+	codeRecommendations: ["code", "recommendations"] as const,
 	codeFiles: (limit?: number) => ["code", "files", limit] as const,
 	codeSymbols: (type?: string, limit?: number) =>
 		["code", "symbols", type, limit] as const,
@@ -31,6 +32,16 @@ export function useCodeInsights() {
 	return useQuery({
 		queryKey: queryKeys.codeInsights,
 		queryFn: () => api.code.insights(),
+		staleTime: Number.POSITIVE_INFINITY,
+	});
+}
+
+export function useCodeRecommendations(enabled = true) {
+	return useQuery({
+		queryKey: queryKeys.codeRecommendations,
+		queryFn: () => api.code.recommendations(),
+		enabled,
+		staleTime: Number.POSITIVE_INFINITY,
 	});
 }
 

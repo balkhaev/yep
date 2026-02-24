@@ -135,8 +135,42 @@ export interface RecentSession {
 }
 
 export interface CodeInsights {
+	avgComplexity: number;
 	avgSymbolsPerFile: number;
+	complexityDistribution: Array<{ range: string; count: number }>;
+	crossDirectoryImports: Array<{
+		from: string;
+		to: string;
+		count: number;
+	}>;
 	deadCode: Array<{ symbol: string; symbolType: string; path: string }>;
+	directoryInsights: Array<{
+		directory: string;
+		symbolCount: number;
+		avgComplexity: number;
+		deadCodeCount: number;
+		docCoverage: number;
+		languages: string[];
+		topSymbol: string;
+	}>;
+	documentationCoverage: number;
+	duplicateClusters: Array<{
+		symbols: Array<{ symbol: string; path: string; symbolType: string }>;
+		similarity: number;
+	}>;
+	duplicateSymbolCount: number;
+	godSymbols: Array<{
+		symbol: string;
+		symbolType: string;
+		path: string;
+		totalConnections: number;
+	}>;
+	highFanInSymbols: Array<{
+		symbol: string;
+		path: string;
+		importerCount: number;
+		importerPercentage: number;
+	}>;
 	hotFiles: Array<{ path: string; symbolCount: number }>;
 	languageDistribution: Array<{
 		language: string;
@@ -149,6 +183,7 @@ export interface CodeInsights {
 		path: string;
 		lineCount: number;
 	}>;
+	medianConnections: number;
 	mostConnected: Array<{
 		symbol: string;
 		symbolType: string;
@@ -158,6 +193,14 @@ export interface CodeInsights {
 		importerCount: number;
 		totalConnections: number;
 	}>;
+	topComplexSymbols: Array<{
+		symbol: string;
+		symbolType: string;
+		path: string;
+		cyclomatic: number;
+		cognitive: number;
+		lineCount: number;
+	}>;
 	totalFiles: number;
 	totalSymbols: number;
 	typeDistribution: Array<{
@@ -165,6 +208,22 @@ export interface CodeInsights {
 		count: number;
 		percentage: number;
 	}>;
+}
+
+export interface CodeRecommendation {
+	affectedSymbols: Array<{ path: string; symbol: string }>;
+	category:
+		| "complexity"
+		| "duplication"
+		| "dead-code"
+		| "health"
+		| "structure"
+		| "architecture"
+		| "modularization";
+	description: string;
+	id: string;
+	severity: "info" | "warning" | "critical";
+	title: string;
 }
 
 export interface IndexCodeEvent {
@@ -319,6 +378,10 @@ export const api = {
 		symbol: (name: string) =>
 			request<SymbolContext>(`/code/symbol/${encodeURIComponent(name)}`),
 		insights: () => request<CodeInsights>("/code/insights"),
+		recommendations: (force = false) =>
+			request<{ recommendations: CodeRecommendation[] }>(
+				`/code/recommendations${force ? "?force=true" : ""}`
+			),
 		indexCode: (onEvent: (event: IndexCodeEvent) => void): AbortController =>
 			streamSSE<IndexCodeEvent>("/index-code", onEvent),
 	},

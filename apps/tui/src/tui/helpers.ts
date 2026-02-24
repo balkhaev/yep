@@ -86,6 +86,24 @@ export const SYMBOL_ICONS: Record<string, string> = {
 	component: "◇",
 };
 
+export function shortenPath(fullPath: string): string {
+	const cwd = process.cwd();
+	const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+
+	// Попытка заменить полный рабочий путь
+	if (fullPath.startsWith(cwd)) {
+		return fullPath.slice(cwd.length).replace(/^\/+/, "");
+	}
+
+	// Попытка заменить домашнюю директорию на ~
+	if (homeDir && fullPath.startsWith(homeDir)) {
+		return `~${fullPath.slice(homeDir.length)}`;
+	}
+
+	// Убрать начальный слеш если есть
+	return fullPath.replace(/^\/+/, "");
+}
+
 async function ensureProvider(): Promise<void> {
 	const config = await import("../mem/lib/config.ts");
 	if (!config.isInitialized()) {
@@ -152,6 +170,10 @@ export async function doSearch(query: string): Promise<SearchHit[]> {
 		timestamp: r.chunk.timestamp,
 		agent: r.chunk.agent,
 		tokensUsed: r.chunk.tokensUsed,
+		confidence: r.chunk.confidence,
+		source: r.chunk.source,
+		language: r.chunk.language,
+		symbols: r.chunk.symbols,
 	}));
 }
 
@@ -185,6 +207,9 @@ export async function doCodeSearch(query: string): Promise<CodeSearchHit[]> {
 		calls: r.chunk.calls,
 		imports: r.chunk.imports,
 		score: r.score,
+		summary: r.chunk.summary ?? "",
+		commit: r.chunk.commit ?? "",
+		lastModified: r.chunk.lastModified ?? "",
 	}));
 }
 
@@ -223,5 +248,24 @@ export async function loadCodeStats(): Promise<CodeStats> {
 		return await getCodeStats();
 	} catch {
 		return { totalSymbols: 0, hasTable: false, languages: [] };
+	}
+}
+
+export async function loadCodeInsights(): Promise<CodeInsights | null> {
+	try {
+		const { getCodeInsights } = await import("../mem/core/code-store.ts");
+		return await getCodeInsights();
+	} catch {
+		return null;
+	}
+}
+
+export async function loadRecentSessions(limit = 5): Promise<RecentSession[]> {
+	try {
+		await ensureProvider();
+		const { getRecentSessions } = await import("../mem/core/store.ts");
+		return await getRecentSessions(limit);
+	} catch {
+		return [];
 	}
 }

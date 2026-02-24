@@ -91,7 +91,7 @@ async function applySummaries(
 		const summary = summaries[i];
 		if (chunk && summary) {
 			chunk.summary = summary;
-			chunk.embeddingText = summary;
+			chunk.embeddingText = `${summary}\n\n${chunk.embeddingText}`;
 		}
 	}
 }
@@ -113,8 +113,14 @@ async function indexChunks(
 		const localVectors = vectors.slice(newChunks.length);
 		for (const cp of changedLocals) {
 			const cpChunks = localChunks.filter((c) => c.checkpointId === cp.id);
-			const first = cpChunks[0] ?? localChunks[0];
-			const startIdx = first ? localChunks.indexOf(first) : 0;
+			if (cpChunks.length === 0) {
+				continue;
+			}
+			const first = cpChunks[0];
+			if (!first) {
+				continue;
+			}
+			const startIdx = localChunks.indexOf(first);
 			const cpVectors = localVectors.slice(
 				startIdx,
 				startIdx + cpChunks.length

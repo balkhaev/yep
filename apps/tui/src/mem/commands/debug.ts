@@ -1024,6 +1024,289 @@ function printSymbolDebug(result: SymbolDebugResult, name: string): void {
 	}
 }
 
+// ── debug summarize ─────────────────────────────────────────
+
+export interface SummarizeDebugResult {
+	diffSummary: string;
+	existingSummary: string;
+	ms: number;
+	newSummary: string;
+	prompt: string;
+	quality: {
+		filesReferenced: string[];
+		hasSpecificSymbols: boolean;
+		lengthChars: number;
+		sentenceCount: number;
+	};
+	response: string;
+}
+
+export async function debugSummarize(
+	query: string
+): Promise<SummarizeDebugResult> {
+	ensureProviderReady();
+
+	const queryVector = await embedText(query);
+	const results = await searchSolutions(queryVector, 1, { queryText: query });
+
+	if (results.length === 0) {
+		throw new Error("No matching chunks found. Run sync first.");
+	}
+
+	const chunk = results[0]!.chunk;
+	const t0 = performance.now();
+	const newSummary = await summarizeChunk(
+		chunk.prompt,
+		chunk.response,
+		chunk.diffSummary
+	);
+	const ms = performance.now() - t0;
+
+	const filePattern = /[\w/.-]+\.(?:ts|tsx|js|jsx|py|go|rs)/g;
+	const filesReferenced = [
+		...new Set(newSummary.match(filePattern) ?? []),
+	].slice(0, 10);
+
+	const symbolPattern = /(?:function|class|interface|type|const)\s+(\w{3,})/g;
+	const symbolMatches = [...newSummary.matchAll(symbolPattern)];
+	const freeformSymbols = newSummary
+		.split(/\s+/)
+		.filter((w) => /^[a-z][a-zA-Z]{4,}$/.test(w) && w.includes(""));
+
+	return {
+		prompt: chunk.prompt.slice(0, 500),
+		response: chunk.response.slice(0, 500),
+		diffSummary: chunk.diffSummary.slice(0, 300),
+		existingSummary: chunk.summary,
+		newSummary,
+		ms,
+		quality: {
+			lengthChars: newSummary.length,
+			sentenceCount: newSummary.split(/[.!?]+/).filter(Boolean).length,
+			filesReferenced,
+			hasSpecificSymbols:
+				symbolMatches.length > 0 || freeformSymbols.length > 0,
+		},
+	};
+}
+
+function printSummarizeDebug(result: SummarizeDebugResult): void {
+	console.log(bold("\n  Summarize Debug"));
+	console.log(dim(`  Generation time: ${formatMs(result.ms)}\n`));
+
+	console.log(bold("  Input:"));
+	console.log(`    Prompt:   ${dim(truncate(result.prompt, 100))}`);
+	console.log(`    Response: ${dim(truncate(result.response, 100))}`);
+	if (result.diffSummary) {
+		console.log(`    Diff:     ${dim(truncate(result.diffSummary, 100))}`);
+	}
+
+	if (result.existingSummary) {
+		console.log(bold("\n  Existing summary:"));
+		console.log(`    ${yellow(result.existingSummary)}`);
+	}
+
+	console.log(bold("\n  New summary:"));
+	console.log(`    ${green(result.newSummary)}`);
+
+	console.log(bold("\n  Quality:"));
+	console.log(`    Length: ${result.quality.lengthChars} chars`);
+	console.log(`    Sentences: ${result.quality.sentenceCount}`);
+	console.log(
+		`    Files referenced: ${result.quality.filesReferenced.length > 0 ? result.quality.filesReferenced.join(", ") : dim("none")}`
+	);
+	console.log(
+		`    Specific symbols: ${result.quality.hasSpecificSymbols ? green("yes") : yellow("no")}`
+	);
+}
+
+// ── debug pipeline ──────────────────────────────────────────
+
+export interface PipelineDebugResult {
+	checkpointId: string;
+	chunks: Array<{
+		diffSummary: string;
+		embeddingTextLen: number;
+		filesChanged: string[];
+		id: string;
+		language: string;
+		promptPreview: string;
+		responsePreview: string;
+		summary: string;
+		symbols: string[];
+	}>;
+	embedding: {
+		dimensions: number;
+		magnitude: number;
+		ms: number;
+		nearestNeighbors: Array<{
+			distance: number;
+			id: string;
+			summary: string;
+		}>;
+	};
+	sessionCount: number;
+	summarization: {
+		ms: number;
+		summaries: string[];
+	};
+	transcriptEntries: number;
+}
+
+export async function debugPipeline(
+	limit = 1
+): Promise<PipelineDebugResult | null> {
+	const checkpoints = await parseAllCheckpoints();
+	if (checkpoints.length === 0) {
+		return null;
+	}
+
+	const cp = checkpoints.at(-1)!;
+
+	let totalEntries = 0;
+	for (const s of cp.sessions) {
+		totalEntries += s.transcript.length;
+	}
+
+	const chunks = chunkCheckpoints([cp]);
+	if (chunks.length === 0) {
+		return {
+			checkpointId: cp.id,
+			sessionCount: cp.sessions.length,
+			transcriptEntries: totalEntries,
+			chunks: [],
+			summarization: { ms: 0, summaries: [] },
+			embedding: { dimensions: 0, magnitude: 0, ms: 0, nearestNeighbors: [] },
+		};
+	}
+
+	const chunkInfos = chunks.slice(0, limit).map((c) => ({
+		id: c.id,
+		promptPreview: c.prompt.slice(0, 200),
+		responsePreview: c.response.slice(0, 200),
+		diffSummary: c.diffSummary.slice(0, 200),
+		filesChanged: c.metadata.filesChanged,
+		symbols: c.metadata.symbols ?? [],
+		language: c.metadata.language ?? "",
+		embeddingTextLen: c.embeddingText.length,
+		summary: "",
+	}));
+
+	ensureProviderReady();
+
+	const t0 = performance.now();
+	const summaries: string[] = [];
+	for (const c of chunks.slice(0, limit)) {
+		const s = await summarizeChunk(c.prompt, c.response, c.diffSummary);
+		summaries.push(s);
+	}
+	const sumMs = performance.now() - t0;
+
+	for (let i = 0; i < chunkInfos.length; i++) {
+		const info = chunkInfos[i];
+		const summary = summaries[i];
+		if (info && summary) {
+			info.summary = summary;
+		}
+	}
+
+	const firstChunk = chunks[0]!;
+	const embText = `${summaries[0] ?? ""}\n\n${firstChunk.embeddingText}`;
+	const t1 = performance.now();
+	const vector = await embedText(embText);
+	const embMs = performance.now() - t1;
+
+	const magnitude = Math.sqrt(vector.reduce((s, v) => s + v * v, 0));
+
+	let nearestNeighbors: PipelineDebugResult["embedding"]["nearestNeighbors"] =
+		[];
+	const conn = await getConnection();
+	const tables = await conn.tableNames();
+	if (tables.includes("solutions")) {
+		const table = await conn.openTable("solutions");
+		const rows = (await table.search(vector).limit(5).toArray()) as Record<
+			string,
+			unknown
+		>[];
+		nearestNeighbors = rows.map((r) => ({
+			id: (r.id as string) ?? "",
+			summary: ((r.summary as string) ?? "").slice(0, 100),
+			distance: (r._distance as number) ?? 0,
+		}));
+	}
+
+	return {
+		checkpointId: cp.id,
+		sessionCount: cp.sessions.length,
+		transcriptEntries: totalEntries,
+		chunks: chunkInfos,
+		summarization: { ms: sumMs, summaries },
+		embedding: {
+			dimensions: vector.length,
+			magnitude: Math.round(magnitude * 1000) / 1000,
+			ms: embMs,
+			nearestNeighbors,
+		},
+	};
+}
+
+function printPipelineDebug(result: PipelineDebugResult | null): void {
+	if (!result) {
+		console.log(red("\n  No checkpoints found. Nothing to trace."));
+		return;
+	}
+
+	console.log(bold("\n  Pipeline Debug"));
+	console.log(
+		`  Checkpoint: ${cyan(result.checkpointId)} (${result.sessionCount} sessions, ${result.transcriptEntries} transcript entries)\n`
+	);
+
+	if (result.chunks.length === 0) {
+		console.log(yellow("  No chunks produced from this checkpoint."));
+		return;
+	}
+
+	for (const [i, chunk] of result.chunks.entries()) {
+		console.log(bold(`  Chunk ${i + 1}: ${dim(chunk.id)}`));
+		console.log(`    Prompt:   ${dim(truncate(chunk.promptPreview, 100))}`);
+		console.log(`    Response: ${dim(truncate(chunk.responsePreview, 100))}`);
+		if (chunk.diffSummary) {
+			console.log(`    Diff:     ${dim(truncate(chunk.diffSummary, 80))}`);
+		}
+		console.log(
+			`    Files:    ${chunk.filesChanged.length > 0 ? chunk.filesChanged.slice(0, 5).join(", ") : dim("none")}`
+		);
+		console.log(
+			`    Symbols:  ${chunk.symbols.length > 0 ? chunk.symbols.slice(0, 8).join(", ") : dim("none")}`
+		);
+		console.log(
+			`    Language: ${chunk.language || dim("unknown")}  |  Embedding text: ${chunk.embeddingTextLen} chars`
+		);
+		if (chunk.summary) {
+			console.log(`    Summary:  ${green(chunk.summary)}`);
+		}
+		console.log();
+	}
+
+	console.log(
+		bold("  Summarization:") + dim(` ${formatMs(result.summarization.ms)}`)
+	);
+	for (const [i, s] of result.summarization.summaries.entries()) {
+		console.log(`    [${i + 1}] ${s}`);
+	}
+
+	console.log(
+		`\n${bold("  Embedding:")} ${result.embedding.dimensions}d, magnitude=${result.embedding.magnitude}, ${formatMs(result.embedding.ms)}`
+	);
+	if (result.embedding.nearestNeighbors.length > 0) {
+		console.log(bold("  Nearest in solutions index:"));
+		for (const n of result.embedding.nearestNeighbors) {
+			const sim = (1 - n.distance).toFixed(4);
+			console.log(`    ${dim(sim)} ${truncate(n.summary || n.id, 80)}`);
+		}
+	}
+}
+
 // ── CLI dispatcher ──────────────────────────────────────────
 
 function printDebugHelp(): void {

@@ -1,7 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type SyncEvent } from "@/api";
 import AnimatedNumber from "@/components/charts/AnimatedNumber";
 import StepProgress from "@/components/charts/StepProgress";
+import { queryKeys } from "@/hooks/queries";
 
 interface LogEntry {
 	id: number;
@@ -20,6 +22,7 @@ const SYNC_STEPS = [
 ];
 
 export default function Sync() {
+	const queryClient = useQueryClient();
 	const [syncing, setSyncing] = useState(false);
 	const [logs, setLogs] = useState<LogEntry[]>([]);
 	const [finished, setFinished] = useState<{
@@ -88,12 +91,18 @@ export default function Sync() {
 					setSyncing(false);
 					setCurrentStep(null);
 					setCompletedSteps(new Set(SYNC_STEPS.map((s) => s.key)));
+					queryClient.invalidateQueries({ queryKey: queryKeys.codeInsights });
+					queryClient.invalidateQueries({
+						queryKey: queryKeys.codeRecommendations,
+					});
 					break;
 				case "error":
 					addLog("error", event.data.message);
 					setFinished({ success: false });
 					setSyncing(false);
 					setCurrentStep(null);
+					break;
+				default:
 					break;
 			}
 		});
@@ -112,6 +121,22 @@ export default function Sync() {
 	const progressCount = logs.filter((l) => l.type === "progress").length;
 	const elapsedSec = Math.round(elapsed / 1000);
 
+	const completedStepCount = completedSteps.size;
+	const totalStepCount = SYNC_STEPS.length;
+	const currentStepIndex = currentStep
+		? SYNC_STEPS.findIndex((s) => s.key === currentStep)
+		: -1;
+	const progressFraction =
+		totalStepCount > 0
+			? (completedStepCount + (currentStepIndex >= 0 ? 0.5 : 0)) /
+				totalStepCount
+			: 0;
+	const progressPercent = Math.min(Math.round(progressFraction * 100), 99);
+	const estimatedRemainingSec =
+		progressFraction > 0.05 && elapsed > 2000
+			? Math.round((elapsed / progressFraction - elapsed) / 1000)
+			: null;
+
 	return (
 		<div className="space-y-6">
 			<div className="fade-in-up">
@@ -122,12 +147,20 @@ export default function Sync() {
 			</div>
 
 			{(syncing || finished) && (
-				<div className="card fade-in-up stagger-1 p-6">
+				<div className="card fade-in-up stagger-1 space-y-4 p-6">
 					<StepProgress
 						completedSteps={completedSteps}
 						currentStep={currentStep}
 						steps={SYNC_STEPS}
 					/>
+					{syncing && (
+						<div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+							<div
+								className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+								style={{ width: `${progressPercent}%` }}
+							/>
+						</div>
+					)}
 				</div>
 			)}
 
@@ -159,12 +192,21 @@ export default function Sync() {
 									<span className="font-medium text-sm text-zinc-300">
 										Syncing...
 									</span>
+									<span className="font-mono text-indigo-400 text-sm tabular-nums">
+										{progressPercent}%
+									</span>
 								</div>
 								<div className="flex items-center gap-4 text-xs text-zinc-500">
 									<span className="tabular-nums">
 										<AnimatedNumber value={progressCount} /> steps
 									</span>
 									<span className="tabular-nums">{elapsedSec}s elapsed</span>
+									{estimatedRemainingSec !== null &&
+										estimatedRemainingSec > 0 && (
+											<span className="tabular-nums">
+												~{estimatedRemainingSec}s remaining
+											</span>
+										)}
 								</div>
 							</div>
 						)}
@@ -244,6 +286,7 @@ export default function Sync() {
 					<div className="text-center">
 						<div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-800/60">
 							<svg
+								aria-hidden="true"
 								className="h-5 w-5 text-zinc-600"
 								fill="currentColor"
 								viewBox="0 0 16 16"

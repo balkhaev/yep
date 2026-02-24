@@ -3,6 +3,14 @@ import { cors } from "hono/cors";
 import type { SSEStreamingApi } from "hono/streaming";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import {
+	debugCleanup,
+	debugEmbedding,
+	debugIndex,
+	debugParse,
+	debugSearch,
+	debugSymbol,
+} from "./debug.ts";
 
 // LanceDB returns BigInt for numeric fields — make them JSON-serializable
 (BigInt.prototype as unknown as { toJSON: () => number }).toJSON = function (
@@ -16,12 +24,14 @@ import {
 	findCallers,
 	findImporters,
 	findSymbolByName,
+	getCachedInsights,
 	getCodeInsights,
 	getCodeStats,
 	getRecentIndexedFiles,
 	listAllSymbols,
 } from "../core/code-store.ts";
 import { embedText } from "../core/embedder.ts";
+import { generateRecommendations } from "../core/recommendations.ts";
 import {
 	dropTable,
 	getRecentSessions,
@@ -39,6 +49,7 @@ import {
 	readConfig,
 	updateConfig,
 } from "../lib/config.ts";
+import { runCodeIndex } from "./index-code.ts";
 
 type SendFn = (event: string, data: unknown) => Promise<void>;
 
@@ -83,7 +94,6 @@ async function runSyncSSE(send: SendFn): Promise<void> {
 	});
 
 	try {
-		const { runCodeIndex } = await import("./index-code.ts");
 		const codeResult = await runCodeIndex((msg, progress) => {
 			send("progress", { step: "code-index", message: msg, ...progress });
 		});
@@ -272,6 +282,17 @@ app.get("/code/insights", async (c) => {
 	return c.json(insights);
 });
 
+app.get("/code/recommendations", async (c) => {
+	ensureProviderReady();
+	const force = c.req.query("force") === "true";
+	const insights = getCachedInsights() ?? (await getCodeInsights());
+	if (!insights) {
+		return c.json({ error: "Code index not available. Run sync first." }, 404);
+	}
+	const recommendations = await generateRecommendations(insights, force);
+	return c.json({ recommendations });
+});
+
 app.post("/index-code", (c) => {
 	return streamSSE(c, async (stream) => {
 		const send = async (event: string, data: unknown): Promise<void> => {
@@ -280,7 +301,6 @@ app.post("/index-code", (c) => {
 
 		try {
 			ensureProviderReady();
-			const { runCodeIndex } = await import("./index-code.ts");
 
 			await send("progress", {
 				step: "indexing",
@@ -314,13 +334,11 @@ app.post("/debug/parse", async (c) => {
 	if (!body.file) {
 		return c.json({ error: "file is required" }, 400);
 	}
-	const { debugParse } = await import("./debug.ts");
 	const result = await debugParse(body.file);
 	return c.json(result);
 });
 
 app.get("/debug/index", async (c) => {
-	const { debugIndex } = await import("./debug.ts");
 	const result = await debugIndex();
 	return c.json(result);
 });
@@ -331,7 +349,6 @@ app.post("/debug/search", async (c) => {
 		return c.json({ error: "query is required" }, 400);
 	}
 	ensureProviderReady();
-	const { debugSearch } = await import("./debug.ts");
 	const result = await debugSearch(body.query);
 	return c.json(result);
 });
@@ -342,7 +359,6 @@ app.post("/debug/embedding", async (c) => {
 		return c.json({ error: "text is required" }, 400);
 	}
 	ensureProviderReady();
-	const { debugEmbedding } = await import("./debug.ts");
 	const result = await debugEmbedding(body.text);
 	return c.json(result);
 });
@@ -353,13 +369,11 @@ app.post("/debug/symbol", async (c) => {
 		return c.json({ error: "name is required" }, 400);
 	}
 	ensureProviderReady();
-	const { debugSymbol } = await import("./debug.ts");
 	const result = await debugSymbol(body.name);
 	return c.json(result);
 });
 
 app.post("/debug/cleanup", async (c) => {
-	const { debugCleanup } = await import("./debug.ts");
 	const result = await debugCleanup();
 	return c.json(result);
 });

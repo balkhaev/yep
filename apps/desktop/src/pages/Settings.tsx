@@ -43,6 +43,11 @@ export default function Settings() {
 	const [resetConfirm, setResetConfirm] = useState(false);
 	const [resetting, setResetting] = useState(false);
 	const [resetResult, setResetResult] = useState<string | null>(null);
+	const [testingConnection, setTestingConnection] = useState(false);
+	const [connectionResult, setConnectionResult] = useState<{
+		ok: boolean;
+		latency: number;
+	} | null>(null);
 
 	useEffect(() => {
 		Promise.all([
@@ -90,6 +95,26 @@ export default function Settings() {
 			setSaving(false);
 		}
 	}, [provider, embeddingModel, summarizerModel, apiKey, ollamaUrl]);
+
+	const handleTestConnection = useCallback(async () => {
+		setTestingConnection(true);
+		setConnectionResult(null);
+		const start = performance.now();
+		try {
+			await api.health();
+			setConnectionResult({
+				ok: true,
+				latency: Math.round(performance.now() - start),
+			});
+		} catch {
+			setConnectionResult({
+				ok: false,
+				latency: Math.round(performance.now() - start),
+			});
+		} finally {
+			setTestingConnection(false);
+		}
+	}, []);
 
 	const handleReset = useCallback(async () => {
 		setResetting(true);
@@ -263,9 +288,39 @@ export default function Settings() {
 				</div>
 			</div>
 
+			<div className="card fade-in-up stagger-2 p-6">
+				<div className="mb-4 flex items-center justify-between">
+					<h2 className="font-semibold text-sm text-zinc-200">Connection</h2>
+					<button
+						className="btn-secondary text-xs"
+						disabled={testingConnection}
+						onClick={handleTestConnection}
+						type="button"
+					>
+						{testingConnection ? "Testing..." : "Test Connection"}
+					</button>
+				</div>
+				{connectionResult && (
+					<div
+						className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${
+							connectionResult.ok
+								? "bg-emerald-500/10 text-emerald-400"
+								: "bg-red-500/10 text-red-400"
+						}`}
+					>
+						<span
+							className={`h-1.5 w-1.5 rounded-full ${connectionResult.ok ? "bg-emerald-400" : "bg-red-400"}`}
+						/>
+						{connectionResult.ok
+							? `Connected (${connectionResult.latency}ms)`
+							: `Failed (${connectionResult.latency}ms)`}
+					</div>
+				)}
+			</div>
+
 			<div className="grid gap-6 lg:grid-cols-2">
 				{config && (
-					<div className="card fade-in-up stagger-2 p-6">
+					<div className="card fade-in-up stagger-3 p-6">
 						<h2 className="mb-4 font-semibold text-sm text-zinc-200">Info</h2>
 						<dl className="space-y-3">
 							<div className="flex items-center justify-between text-sm">
@@ -275,9 +330,19 @@ export default function Settings() {
 								</dd>
 							</div>
 							<div className="flex items-center justify-between text-sm">
-								<dt className="text-zinc-500">Last indexed commit</dt>
+								<dt className="text-zinc-500">Last sync commit</dt>
 								<dd className="font-mono text-xs text-zinc-300">
-									{config.lastIndexedCommit ?? "never"}
+									{config.lastIndexedCommit
+										? config.lastIndexedCommit.slice(0, 7)
+										: "never"}
+								</dd>
+							</div>
+							<div className="flex items-center justify-between text-sm">
+								<dt className="text-zinc-500">Last code index</dt>
+								<dd className="font-mono text-xs text-zinc-300">
+									{config.lastCodeIndexCommit
+										? config.lastCodeIndexCommit.slice(0, 7)
+										: "never"}
 								</dd>
 							</div>
 							<div className="flex items-center justify-between text-sm">
@@ -289,7 +354,7 @@ export default function Settings() {
 				)}
 
 				{stats && (
-					<div className="card fade-in-up stagger-3 p-6">
+					<div className="card fade-in-up stagger-4 p-6">
 						<h2 className="mb-4 font-semibold text-sm text-zinc-200">
 							Storage
 						</h2>
@@ -312,7 +377,7 @@ export default function Settings() {
 				)}
 			</div>
 
-			<div className="card fade-in-up stagger-4 border-red-900/20 bg-red-950/5 p-6">
+			<div className="card fade-in-up stagger-5 border-red-900/20 bg-red-950/5 p-6">
 				<h2 className="mb-1 font-semibold text-red-400 text-sm">Danger Zone</h2>
 				<p className="mb-4 text-sm text-zinc-500">
 					Drop the vector store and recreate it empty. All indexed data will be
