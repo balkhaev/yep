@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "c02ca001ef84",
+  "session_id": "unknown",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-24T10:57:02.266864Z",
+  "branch": "main",
+  "checkpoints_count": 17,
+  "files_touched": [
+    "apps/desktop/src/components/SearchResult.tsx",
+    "apps/desktop/src/components/charts/ComplexityHistogram.tsx",
+    "apps/desktop/src/components/charts/DirectoryTable.tsx",
+    "apps/desktop/src/components/charts/GaugeChart.tsx",
+    "apps/desktop/src/components/charts/RecommendationCard.tsx",
+    "apps/tui/gui-dist/assets/index-CFWOq977.css",
+    "apps/tui/gui-dist/assets/index-RCwqC6by.js",
+    "apps/tui/gui-dist/index.html",
+    "apps/tui/src/mem/core/complexity.ts",
+    "apps/tui/src/mem/core/duplication.ts",
+    "apps/tui/src/mem/core/recommendations.ts",
+    "apps/tui/src/mem/core/sync-engine.ts",
+    "apps/tui/src/mem/lib/sql.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "8647390a3895",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-24T10:57:02.258246Z",
+    "agent_lines": 0,
+    "human_added": 5277,
+    "human_modified": 6868,
+    "human_removed": 0,
+    "total_committed": 5338,
+    "agent_percentage": 0
+  },
+  "transcript_path": ".cursor/projects/Users-balkhaev-mycode-yep/agent-transcripts/bbf907b5-8122-4392-8ce6-428d74052166/bbf907b5-8122-4392-8ce6-428d74052166.jsonl"
+}
