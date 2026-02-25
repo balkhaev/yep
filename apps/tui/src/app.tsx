@@ -284,7 +284,7 @@ function SearchView({
 			)}
 
 			{results.length > 0 && (
-				<box border borderStyle="round" flexGrow={1} title=" Results ">
+				<box border borderStyle="rounded" flexGrow={1} title=" Results ">
 					<select
 						flexGrow={1}
 						focused={results.length > 0}
@@ -380,7 +380,7 @@ function CodeDetail({ entry }: { entry: CodeSearchHit }) {
 
 				<box
 					border
-					borderStyle="round"
+					borderStyle="rounded"
 					flexDirection="column"
 					marginTop={1}
 					title=" Source "
@@ -486,7 +486,7 @@ function CodeSearchView({
 			)}
 
 			{results.length > 0 && (
-				<box border borderStyle="round" flexGrow={1} title=" Symbols ">
+				<box border borderStyle="rounded" flexGrow={1} title=" Symbols ">
 					<select
 						flexGrow={1}
 						focused={results.length > 0}
@@ -538,7 +538,7 @@ function StatusView({ stats }: { stats: MemStats | null }) {
 			<box flexDirection="column" paddingX={1}>
 				<box
 					border
-					borderStyle="round"
+					borderStyle="rounded"
 					flexDirection="column"
 					paddingX={1}
 					title=" Memory "
@@ -561,7 +561,7 @@ function StatusView({ stats }: { stats: MemStats | null }) {
 				{codeStats && (
 					<box
 						border
-						borderStyle="round"
+						borderStyle="rounded"
 						flexDirection="column"
 						marginTop={1}
 						paddingX={1}
@@ -595,7 +595,7 @@ function StatusView({ stats }: { stats: MemStats | null }) {
 				{insights && insights.mostConnected.length > 0 && (
 					<box
 						border
-						borderStyle="round"
+						borderStyle="rounded"
 						flexDirection="column"
 						marginTop={1}
 						paddingX={1}
@@ -618,7 +618,7 @@ function StatusView({ stats }: { stats: MemStats | null }) {
 				{insights && insights.largestSymbols.length > 0 && (
 					<box
 						border
-						borderStyle="round"
+						borderStyle="rounded"
 						flexDirection="column"
 						marginTop={1}
 						paddingX={1}
@@ -641,7 +641,7 @@ function StatusView({ stats }: { stats: MemStats | null }) {
 				{insights && insights.languageDistribution.length > 0 && (
 					<box
 						border
-						borderStyle="round"
+						borderStyle="rounded"
 						flexDirection="column"
 						marginTop={1}
 						paddingX={1}
@@ -661,7 +661,7 @@ function StatusView({ stats }: { stats: MemStats | null }) {
 				{recent.length > 0 && (
 					<box
 						border
-						borderStyle="round"
+						borderStyle="rounded"
 						flexDirection="column"
 						marginTop={1}
 						paddingX={1}
@@ -691,7 +691,7 @@ function StatusView({ stats }: { stats: MemStats | null }) {
 				{stats.topFiles.length > 0 && (
 					<box
 						border
-						borderStyle="round"
+						borderStyle="rounded"
 						flexDirection="column"
 						marginTop={1}
 						paddingX={1}
@@ -880,7 +880,7 @@ function DiffView({
 				/>
 				<box
 					border
-					borderStyle="round"
+					borderStyle="rounded"
 					flexGrow={1}
 					marginTop={1}
 					title=" Files "
@@ -978,7 +978,7 @@ function DiffView({
 			/>
 			<box
 				border
-				borderStyle="round"
+				borderStyle="rounded"
 				flexGrow={1}
 				marginTop={1}
 				title=" Timeline "
@@ -1081,7 +1081,7 @@ function App() {
 
 	return (
 		<box flexDirection="column" flexGrow={1}>
-			<box border borderStyle="round" flexDirection="column" paddingX={1}>
+			<box border borderStyle="rounded" flexDirection="column" paddingX={1}>
 				<ascii-font font="tiny" text="yep" />
 				<StatusBar stats={stats} />
 			</box>

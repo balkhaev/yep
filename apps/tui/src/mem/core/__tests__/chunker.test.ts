@@ -9,6 +9,7 @@ function makeCheckpoint(
 		id: "test-checkpoint-001",
 		sessions: [
 			{
+				checkpointId: "test-checkpoint-001",
 				sessionIndex: 0,
 				transcript: [
 					{ role: "user", content: "How do I implement auth?" },
@@ -30,6 +31,7 @@ function makeCheckpoint(
 			},
 		],
 		metadata: {
+			id: "test-checkpoint-001",
 			timestamp: "2025-01-15T10:00:00Z",
 		},
 		...overrides,
@@ -67,6 +69,7 @@ describe("chunkCheckpoint", () => {
 		const cp = makeCheckpoint({
 			sessions: [
 				{
+					checkpointId: "test-checkpoint-001",
 					sessionIndex: 0,
 					transcript: [
 						{ role: "user", content: "Question 1" },
@@ -90,6 +93,7 @@ describe("chunkCheckpoint", () => {
 		const cp = makeCheckpoint({
 			sessions: [
 				{
+					checkpointId: "test-checkpoint-001",
 					sessionIndex: 0,
 					transcript: [
 						{ role: "user", content: "Q1" },
@@ -112,6 +116,7 @@ describe("chunkCheckpoint", () => {
 		const cp = makeCheckpoint({
 			sessions: [
 				{
+					checkpointId: "test-checkpoint-001",
 					sessionIndex: 0,
 					transcript: [],
 					metadata: { agent: "cursor", tokenUsage: { totalTokens: 0 } },
@@ -129,6 +134,7 @@ describe("chunkCheckpoint", () => {
 		const cp = makeCheckpoint({
 			sessions: [
 				{
+					checkpointId: "test-checkpoint-001",
 					sessionIndex: 0,
 					transcript: [
 						{
@@ -155,6 +161,7 @@ describe("chunkCheckpoint", () => {
 		const cp = makeCheckpoint({
 			sessions: [
 				{
+					checkpointId: "test-checkpoint-001",
 					sessionIndex: 0,
 					transcript: [
 						{ role: "user", content: "Fix src/app.tsx and src/index.ts" },
@@ -175,6 +182,7 @@ describe("chunkCheckpoint", () => {
 		const cp = makeCheckpoint({
 			sessions: [
 				{
+					checkpointId: "test-checkpoint-001",
 					sessionIndex: 0,
 					transcript: [
 						{ role: "user", content: "Q" },

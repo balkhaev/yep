@@ -28,6 +28,9 @@
     "db:generate": "turbo -F @yep/db db:generate",
     "db:migrate": "turbo -F @yep/db db:migrate",
     "db:local": "turbo -F @yep/db db:local",
+    "publish:patch": "turbo -F yep-mem publish:patch",
+    "publish:minor": "turbo -F yep-mem publish:minor",
+    "publish:major": "turbo -F yep-mem publish:major",
     "test": "turbo test",
     "check": "ultracite check",
     "fix": "ultracite fix"

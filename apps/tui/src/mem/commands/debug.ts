@@ -5,6 +5,9 @@ import {
 	chunkFileSymbols,
 	parseFileSymbols,
 } from "../core/code-chunker.ts";
+import { chunkCheckpoints } from "../core/chunker.ts";
+import { parseAllCheckpoints } from "../core/parser.ts";
+import { summarizeChunk } from "../core/summarizer.ts";
 import {
 	type CodeResult,
 	deleteCodeChunksByPath,
@@ -15,7 +18,12 @@ import {
 	listAllSymbols,
 } from "../core/code-store.ts";
 import { embedText } from "../core/embedder.ts";
-import { getConnection, getStats, unifiedSearch } from "../core/store.ts";
+import {
+	getConnection,
+	getStats,
+	searchSolutions,
+	unifiedSearch,
+} from "../core/store.ts";
 import { ensureProviderReady, getVectorDimensions } from "../lib/config.ts";
 import { requireInit } from "../lib/guards.ts";
 
@@ -1071,7 +1079,7 @@ export async function debugSummarize(
 	const symbolMatches = [...newSummary.matchAll(symbolPattern)];
 	const freeformSymbols = newSummary
 		.split(/\s+/)
-		.filter((w) => /^[a-z][a-zA-Z]{4,}$/.test(w) && w.includes(""));
+		.filter((w: string) => /^[a-z][a-zA-Z]{4,}$/.test(w) && w.includes(""));
 
 	return {
 		prompt: chunk.prompt.slice(0, 500),
@@ -1088,36 +1096,6 @@ export async function debugSummarize(
 				symbolMatches.length > 0 || freeformSymbols.length > 0,
 		},
 	};
-}
-
-function printSummarizeDebug(result: SummarizeDebugResult): void {
-	console.log(bold("\n  Summarize Debug"));
-	console.log(dim(`  Generation time: ${formatMs(result.ms)}\n`));
-
-	console.log(bold("  Input:"));
-	console.log(`    Prompt:   ${dim(truncate(result.prompt, 100))}`);
-	console.log(`    Response: ${dim(truncate(result.response, 100))}`);
-	if (result.diffSummary) {
-		console.log(`    Diff:     ${dim(truncate(result.diffSummary, 100))}`);
-	}
-
-	if (result.existingSummary) {
-		console.log(bold("\n  Existing summary:"));
-		console.log(`    ${yellow(result.existingSummary)}`);
-	}
-
-	console.log(bold("\n  New summary:"));
-	console.log(`    ${green(result.newSummary)}`);
-
-	console.log(bold("\n  Quality:"));
-	console.log(`    Length: ${result.quality.lengthChars} chars`);
-	console.log(`    Sentences: ${result.quality.sentenceCount}`);
-	console.log(
-		`    Files referenced: ${result.quality.filesReferenced.length > 0 ? result.quality.filesReferenced.join(", ") : dim("none")}`
-	);
-	console.log(
-		`    Specific symbols: ${result.quality.hasSpecificSymbols ? green("yes") : yellow("no")}`
-	);
 }
 
 // ── debug pipeline ──────────────────────────────────────────
@@ -1248,63 +1226,6 @@ export async function debugPipeline(
 			nearestNeighbors,
 		},
 	};
-}
-
-function printPipelineDebug(result: PipelineDebugResult | null): void {
-	if (!result) {
-		console.log(red("\n  No checkpoints found. Nothing to trace."));
-		return;
-	}
-
-	console.log(bold("\n  Pipeline Debug"));
-	console.log(
-		`  Checkpoint: ${cyan(result.checkpointId)} (${result.sessionCount} sessions, ${result.transcriptEntries} transcript entries)\n`
-	);
-
-	if (result.chunks.length === 0) {
-		console.log(yellow("  No chunks produced from this checkpoint."));
-		return;
-	}
-
-	for (const [i, chunk] of result.chunks.entries()) {
-		console.log(bold(`  Chunk ${i + 1}: ${dim(chunk.id)}`));
-		console.log(`    Prompt:   ${dim(truncate(chunk.promptPreview, 100))}`);
-		console.log(`    Response: ${dim(truncate(chunk.responsePreview, 100))}`);
-		if (chunk.diffSummary) {
-			console.log(`    Diff:     ${dim(truncate(chunk.diffSummary, 80))}`);
-		}
-		console.log(
-			`    Files:    ${chunk.filesChanged.length > 0 ? chunk.filesChanged.slice(0, 5).join(", ") : dim("none")}`
-		);
-		console.log(
-			`    Symbols:  ${chunk.symbols.length > 0 ? chunk.symbols.slice(0, 8).join(", ") : dim("none")}`
-		);
-		console.log(
-			`    Language: ${chunk.language || dim("unknown")}  |  Embedding text: ${chunk.embeddingTextLen} chars`
-		);
-		if (chunk.summary) {
-			console.log(`    Summary:  ${green(chunk.summary)}`);
-		}
-		console.log();
-	}
-
-	console.log(
-		bold("  Summarization:") + dim(` ${formatMs(result.summarization.ms)}`)
-	);
-	for (const [i, s] of result.summarization.summaries.entries()) {
-		console.log(`    [${i + 1}] ${s}`);
-	}
-
-	console.log(
-		`\n${bold("  Embedding:")} ${result.embedding.dimensions}d, magnitude=${result.embedding.magnitude}, ${formatMs(result.embedding.ms)}`
-	);
-	if (result.embedding.nearestNeighbors.length > 0) {
-		console.log(bold("  Nearest in solutions index:"));
-		for (const n of result.embedding.nearestNeighbors) {
-			const sim = (1 - n.distance).toFixed(4);
-			console.log(`    ${dim(sim)} ${truncate(n.summary || n.id, 80)}`);
-		}
-	}
 }
 
 // ── CLI dispatcher ──────────────────────────────────────────

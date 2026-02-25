@@ -294,7 +294,7 @@ function streamSSE<T extends { event: string; data: Record<string, unknown> }>(
 			onEvent({
 				event: "error",
 				data: { message: err instanceof Error ? err.message : String(err) },
-			} as T);
+			} as unknown as T);
 		});
 
 	return controller;

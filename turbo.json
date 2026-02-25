@@ -41,6 +41,24 @@
     },
     "db:local": {
       "cache": false
+    },
+    "publish:patch": {
+      "cache": false
+    },
+    "publish:minor": {
+      "cache": false
+    },
+    "publish:major": {
+      "cache": false
+    },
+    "version:patch": {
+      "cache": false
+    },
+    "version:minor": {
+      "cache": false
+    },
+    "version:major": {
+      "cache": false
     }
   }
 }

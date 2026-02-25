@@ -6,6 +6,19 @@ import type {
 	SearchHit,
 } from "./types.ts";
 
+type CodeInsights = Awaited<
+	ReturnType<
+		typeof import("../mem/core/code-store.ts")["getCodeInsights"]
+	>
+>;
+
+type RecentSession = {
+	agent: string;
+	filesChanged: string;
+	summary: string;
+	timestamp: string;
+};
+
 function cleanText(raw: string): string {
 	return raw
 		.replace(/<[^>]+>/g, "")
