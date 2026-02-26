@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "d3031ecd0d72",
+  "session_id": "fe66651f-0da5-45d0-a44d-7ce4e9c06f96",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-26T10:09:16.523963Z",
+  "branch": "main",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "apps/desktop/src/components/charts/theme.ts",
+    "apps/desktop/src/pages/Diff.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f3abef35d65b",
+  "transcript_identifier_at_start": "7a501b2a-3354-43c8-894f-38aca6e4ad15",
+  "token_usage": {
+    "input_tokens": 193,
+    "cache_creation_tokens": 37525,
+    "cache_read_tokens": 690591,
+    "output_tokens": 8958,
+    "api_call_count": 17
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-26T10:09:16.454523Z",
+    "agent_lines": 174,
+    "human_added": 21531,
+    "human_modified": 6,
+    "human_removed": 0,
+    "total_committed": 21711,
+    "agent_percentage": 0.8014370595550644
+  },
+  "transcript_path": ".claude/projects/-Users-balkhaev-mycode-yep/fe66651f-0da5-45d0-a44d-7ce4e9c06f96.jsonl"
+}
