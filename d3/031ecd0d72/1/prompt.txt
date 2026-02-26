@@ -1,0 +1,7 @@
+Failed to load patterns
+
+Error: Failed to load patterns
+
+---
+
+не загружаются со страницы http://localhost:3838/insights?tab=patterns  Internal Server Error

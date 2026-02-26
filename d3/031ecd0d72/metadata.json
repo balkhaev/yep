@@ -3,7 +3,7 @@
   "checkpoint_id": "d3031ecd0d72",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 7,
+  "checkpoints_count": 9,
   "files_touched": [
     "apps/desktop/package.json",
     "apps/desktop/src/components/Breadcrumbs.tsx",
@@ -24,7 +24,8 @@
     "apps/desktop/src/hooks/useNavigationHistory.ts",
     "apps/desktop/src/pages/Code.tsx",
     "apps/desktop/src/pages/Dashboard.tsx",
-    "apps/desktop/src/pages/Insights.tsx"
+    "apps/desktop/src/pages/Insights.tsx",
+    "apps/tui/src/mem/commands/api.ts"
   ],
   "sessions": [
     {
@@ -33,13 +34,20 @@
       "context": "/d3/031ecd0d72/0/context.md",
       "content_hash": "/d3/031ecd0d72/0/content_hash.txt",
       "prompt": "/d3/031ecd0d72/0/prompt.txt"
+    },
+    {
+      "metadata": "/d3/031ecd0d72/1/metadata.json",
+      "transcript": "/d3/031ecd0d72/1/full.jsonl",
+      "context": "/d3/031ecd0d72/1/context.md",
+      "content_hash": "/d3/031ecd0d72/1/content_hash.txt",
+      "prompt": "/d3/031ecd0d72/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 8221,
-    "cache_creation_tokens": 533833,
-    "cache_read_tokens": 13437629,
-    "output_tokens": 89145,
-    "api_call_count": 121
+    "input_tokens": 14299,
+    "cache_creation_tokens": 605817,
+    "cache_read_tokens": 15329175,
+    "output_tokens": 96586,
+    "api_call_count": 150
   }
 }
