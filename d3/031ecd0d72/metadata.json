@@ -3,7 +3,7 @@
   "checkpoint_id": "d3031ecd0d72",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 28,
+  "checkpoints_count": 30,
   "files_touched": [
     "apps/desktop/package.json",
     "apps/desktop/src/api.ts",
@@ -12,7 +12,11 @@
     "apps/desktop/src/components/NavigationControls.tsx",
     "apps/desktop/src/components/PageHeader.tsx",
     "apps/desktop/src/components/SearchResult.tsx",
+    "apps/desktop/src/components/charts/ComplexityHistogram.tsx",
+    "apps/desktop/src/components/charts/DonutChart.tsx",
+    "apps/desktop/src/components/charts/HorizontalBarChart.tsx",
     "apps/desktop/src/components/charts/theme.ts",
+    "apps/desktop/src/components/charts/theme.tsx",
     "apps/desktop/src/components/code/FileDetailPanel.tsx",
     "apps/desktop/src/components/code/SymbolDetailPanel.tsx",
     "apps/desktop/src/components/code/SymbolTypeBadge.tsx",
@@ -22,15 +26,40 @@
     "apps/desktop/src/components/code/tabs/OverviewTab.tsx",
     "apps/desktop/src/components/code/tabs/RelationsTab.tsx",
     "apps/desktop/src/components/code/tabs/SourceTab.tsx",
+    "apps/desktop/src/components/insights/CoChangeTab.tsx",
+    "apps/desktop/src/components/insights/PatternsTab.tsx",
+    "apps/desktop/src/components/insights/RiskTab.tsx",
     "apps/desktop/src/components/insights/TrendsTab.tsx",
     "apps/desktop/src/hooks/useNavigationHistory.ts",
     "apps/desktop/src/pages/Code.tsx",
     "apps/desktop/src/pages/Dashboard.tsx",
+    "apps/desktop/src/pages/Diff.tsx",
     "apps/desktop/src/pages/Insights.tsx",
+    "apps/desktop/src/pages/Search.tsx",
+    "apps/desktop/src/pages/Settings.tsx",
+    "apps/tui/src/app.tsx",
     "apps/tui/src/mem/commands/api.ts",
+    "apps/tui/src/mem/commands/debug.ts",
     "apps/tui/src/mem/commands/gui.ts",
+    "apps/tui/src/mem/commands/index-code.ts",
+    "apps/tui/src/mem/commands/trends.ts",
+    "apps/tui/src/mem/core/__tests__/code-chunker.test.ts",
+    "apps/tui/src/mem/core/co-change-analysis.ts",
+    "apps/tui/src/mem/core/code-chunker.ts",
     "apps/tui/src/mem/core/code-store.ts",
-    "apps/tui/src/mem/core/trends.ts"
+    "apps/tui/src/mem/core/git-metadata.ts",
+    "apps/tui/src/mem/core/graph-store.ts",
+    "apps/tui/src/mem/core/metrics-store.ts",
+    "apps/tui/src/mem/core/parsers/go-parser.ts",
+    "apps/tui/src/mem/core/parsers/python-parser.ts",
+    "apps/tui/src/mem/core/trends.ts",
+    "apps/tui/src/tui/components/ui.tsx",
+    "apps/tui/src/tui/views/CodeSearchView.tsx",
+    "apps/tui/src/tui/views/DiffView.tsx",
+    "apps/tui/src/tui/views/InsightsView.tsx",
+    "apps/tui/src/tui/views/SearchView.tsx",
+    "apps/tui/src/tui/views/StatusView.tsx",
+    "docs/ui-integration.md"
   ],
   "sessions": [
     {
@@ -53,13 +82,20 @@
       "context": "/d3/031ecd0d72/2/context.md",
       "content_hash": "/d3/031ecd0d72/2/content_hash.txt",
       "prompt": "/d3/031ecd0d72/2/prompt.txt"
+    },
+    {
+      "metadata": "/d3/031ecd0d72/3/metadata.json",
+      "transcript": "/d3/031ecd0d72/3/full.jsonl",
+      "context": "/d3/031ecd0d72/3/context.md",
+      "content_hash": "/d3/031ecd0d72/3/content_hash.txt",
+      "prompt": "/d3/031ecd0d72/3/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 16195,
-    "cache_creation_tokens": 1521124,
-    "cache_read_tokens": 35704084,
-    "output_tokens": 134488,
-    "api_call_count": 374
+    "input_tokens": 24456,
+    "cache_creation_tokens": 1774004,
+    "cache_read_tokens": 46115822,
+    "output_tokens": 157422,
+    "api_call_count": 482
   }
 }
