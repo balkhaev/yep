@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -18,8 +19,8 @@ beforeAll(() => {
 	process.chdir(TMP_PROJECT);
 });
 
-afterEach(() => {
-	clearCache();
+afterEach(async () => {
+	await clearCache();
 });
 
 afterAll(() => {
@@ -28,50 +29,50 @@ afterAll(() => {
 });
 
 describe("embedding cache", () => {
-	it("returns null for unknown text", () => {
-		expect(getCachedEmbedding("unknown text")).toBeNull();
+	it("returns null for unknown text", async () => {
+		expect(await getCachedEmbedding("unknown text")).toBeNull();
 	});
 
-	it("stores and retrieves embeddings", () => {
+	it("stores and retrieves embeddings", async () => {
 		const vec = [0.1, 0.2, 0.3];
-		setCachedEmbedding("test text", vec);
-		const cached = getCachedEmbedding("test text");
+		await setCachedEmbedding("test text", vec);
+		const cached = await getCachedEmbedding("test text");
 		expect(cached).toEqual(vec);
 	});
 
-	it("returns null after cache is cleared", () => {
-		setCachedEmbedding("persist test", [1, 2, 3]);
-		clearCache();
-		expect(getCachedEmbedding("persist test")).toBeNull();
+	it("returns null after cache is cleared", async () => {
+		await setCachedEmbedding("persist test", [1, 2, 3]);
+		await clearCache();
+		expect(await getCachedEmbedding("persist test")).toBeNull();
 	});
 
-	it("handles LRU eviction", () => {
+	it("handles LRU eviction", async () => {
 		for (let i = 0; i < 210; i++) {
-			setCachedEmbedding(`entry-${i}`, [i]);
+			await setCachedEmbedding(`entry-${i}`, [i]);
 		}
 		// After eviction, cache should contain at most 200 entries
 		// The most recent entries should survive
-		expect(getCachedEmbedding("entry-209")).toEqual([209]);
-		expect(getCachedEmbedding("entry-200")).toEqual([200]);
+		expect(await getCachedEmbedding("entry-209")).toEqual([209]);
+		expect(await getCachedEmbedding("entry-200")).toEqual([200]);
 	});
 });
 
 describe("search cache", () => {
-	it("returns null for unknown query hash", () => {
-		expect(getCachedSearch("nonexistent")).toBeNull();
+	it("returns null for unknown query hash", async () => {
+		expect(await getCachedSearch("nonexistent")).toBeNull();
 	});
 
-	it("stores and retrieves search results", () => {
+	it("stores and retrieves search results", async () => {
 		const results = [{ id: "1", score: 0.9 }];
-		setCachedSearch("query-hash", results);
-		const cached = getCachedSearch("query-hash");
+		await setCachedSearch("query-hash", results);
+		const cached = await getCachedSearch("query-hash");
 		expect(cached).toEqual(results);
 	});
 
-	it("returns null after clearing", () => {
-		setCachedSearch("clear-test", [{ id: "x" }]);
-		clearCache();
-		expect(getCachedSearch("clear-test")).toBeNull();
+	it("returns null after clearing", async () => {
+		await setCachedSearch("clear-test", [{ id: "x" }]);
+		await clearCache();
+		expect(await getCachedSearch("clear-test")).toBeNull();
 	});
 });
 

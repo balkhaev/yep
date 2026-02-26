@@ -1,13 +1,11 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { chunkCheckpoints } from "../core/chunker.ts";
 import {
 	type CodeChunk,
 	chunkFileSymbols,
 	parseFileSymbols,
 } from "../core/code-chunker.ts";
-import { chunkCheckpoints } from "../core/chunker.ts";
-import { parseAllCheckpoints } from "../core/parser.ts";
-import { summarizeChunk } from "../core/summarizer.ts";
 import {
 	type CodeResult,
 	deleteCodeChunksByPath,
@@ -18,12 +16,14 @@ import {
 	listAllSymbols,
 } from "../core/code-store.ts";
 import { embedText } from "../core/embedder.ts";
+import { parseAllCheckpoints } from "../core/parser.ts";
 import {
 	getConnection,
 	getStats,
 	searchSolutions,
 	unifiedSearch,
 } from "../core/store.ts";
+import { summarizeChunk } from "../core/summarizer.ts";
 import { ensureProviderReady, getVectorDimensions } from "../lib/config.ts";
 import { requireInit } from "../lib/guards.ts";
 
@@ -179,9 +179,9 @@ export async function debugParse(filePath: string): Promise<ParseDebugResult> {
 		throw new Error(`File not found: ${fullPath}`);
 	}
 
-	const symbols = parseFileSymbols(fullPath);
+	const symbols = await parseFileSymbols(fullPath);
 	const lastModified = statSync(fullPath).mtime.toISOString();
-	const chunks = chunkFileSymbols(fullPath, lastModified);
+	const chunks = await chunkFileSymbols(fullPath, lastModified);
 
 	const indexedSymbols = await findSymbolsByPath(fullPath);
 	const indexedByName = new Map(indexedSymbols.map((s) => [s.symbol, s]));

@@ -1,16 +1,48 @@
+@import "@fontsource-variable/inter";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
 	:root {
+		--gradient-primary: linear-gradient(
+			135deg,
+			rgb(99, 102, 241) 0%,
+			rgb(139, 92, 246) 100%
+		);
+		--gradient-accent: linear-gradient(
+			135deg,
+			rgb(6, 182, 212) 0%,
+			rgb(16, 185, 129) 100%
+		);
+		--gradient-success: linear-gradient(
+			135deg,
+			rgb(16, 185, 129) 0%,
+			rgb(52, 211, 153) 100%
+		);
+		--gradient-warning: linear-gradient(
+			135deg,
+			rgb(245, 158, 11) 0%,
+			rgb(251, 191, 36) 100%
+		);
+		--gradient-error: linear-gradient(
+			135deg,
+			rgb(239, 68, 68) 0%,
+			rgb(248, 113, 113) 100%
+		);
+
+		/* Glassmorphism variables */
+		--glass-bg: rgba(24, 24, 27, 0.6);
+		--glass-border: rgba(63, 63, 70, 0.3);
+		--glass-highlight: rgba(255, 255, 255, 0.05);
 		color-scheme: dark;
 	}
 
 	body {
 		font-family:
-			-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto,
-			sans-serif;
+			"Inter var", Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display",
+			"Segoe UI", Roboto, sans-serif;
 		@apply bg-zinc-950 text-zinc-100 antialiased;
 	}
 
@@ -59,17 +91,108 @@
 	}
 }
 
+@keyframes shimmer {
+	0% {
+		background-position: -200% 0;
+	}
+	100% {
+		background-position: 200% 0;
+	}
+}
+
+@keyframes slideUp {
+	from {
+		opacity: 0;
+		transform: translateY(16px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes fadeInScale {
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes glowPulse {
+	0%,
+	100% {
+		box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+	}
+	50% {
+		box-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
+	}
+}
+
 @layer components {
 	.card {
 		@apply rounded-2xl border border-zinc-800/60 bg-zinc-900/40 backdrop-blur-sm;
 	}
 
 	.card-hover {
-		@apply card transition-all duration-200 hover:border-zinc-700/60 hover:bg-zinc-900/60;
+		@apply card transition-all duration-200 hover:border-zinc-700/60 hover:bg-zinc-900/60 hover:shadow-glow-sm;
+	}
+
+	.card-gradient {
+		position: relative;
+		background: linear-gradient(
+			135deg,
+			rgba(24, 24, 27, 0.6) 0%,
+			rgba(39, 39, 42, 0.4) 100%
+		);
+		@apply card border-zinc-800/40;
+	}
+
+	.card-gradient::before {
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		padding: 1px;
+		pointer-events: none;
+		content: "";
+		background: linear-gradient(
+			135deg,
+			rgba(99, 102, 241, 0.3),
+			rgba(139, 92, 246, 0.2)
+		);
+		border-radius: inherit;
+		-webkit-mask:
+			linear-gradient(#fff 0 0) content-box,
+			linear-gradient(#fff 0 0);
+		-webkit-mask-composite: xor;
+		mask-composite: exclude;
+	}
+
+	.glass {
+		background: var(--glass-bg);
+		border: 1px solid var(--glass-border);
+		-webkit-backdrop-filter: blur(12px);
+		backdrop-filter: blur(12px);
 	}
 
 	.btn-primary {
-		@apply rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-indigo-500 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+		@apply rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-indigo-500 hover:shadow-glow-sm active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+	}
+
+	.btn-gradient {
+		background: var(--gradient-primary);
+		box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+		@apply rounded-xl px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+	}
+
+	.btn-gradient:hover {
+		box-shadow: 0 0 25px rgba(99, 102, 241, 0.35);
+		transform: translateY(-1px);
 	}
 
 	.btn-secondary {
@@ -127,5 +250,37 @@
 
 	.recharts-tooltip-wrapper {
 		z-index: 50 !important;
+	}
+
+	/* Skeleton loading states */
+	.skeleton {
+		background-size: 200% 100%;
+		@apply animate-shimmer bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 rounded;
+	}
+
+	.skeleton-text {
+		@apply skeleton h-4;
+	}
+
+	.skeleton-title {
+		@apply skeleton h-6;
+	}
+
+	/* Smooth focus states */
+	*:focus-visible {
+		@apply outline-none ring-2 ring-indigo-500/50 ring-offset-2 ring-offset-zinc-950;
+	}
+
+	/* Custom tooltip style */
+	.tooltip {
+		@apply glass rounded-lg px-3 py-2 text-sm text-zinc-100 shadow-lg;
+	}
+
+	/* Gradient text */
+	.text-gradient {
+		-webkit-text-fill-color: transparent;
+		background: var(--gradient-primary);
+		-webkit-background-clip: text;
+		background-clip: text;
 	}
 }

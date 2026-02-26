@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getStorePath } from "../lib/config.ts";
 import { createLogger } from "../lib/logger.ts";
@@ -24,32 +24,41 @@ interface CacheData<T> {
 	entries: Record<string, T>;
 }
 
-function getCacheDir(): string {
+async function ensureCacheDir(): Promise<string> {
 	const dir = join(getStorePath(), "..", "cache");
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
+	try {
+		await access(dir);
+	} catch {
+		await mkdir(dir, { recursive: true });
 	}
 	return dir;
+}
+
+function getCacheDir(): string {
+	return join(getStorePath(), "..", "cache");
 }
 
 function hashKey(text: string): string {
 	return createHash("sha256").update(text).digest("hex").slice(0, 24);
 }
 
-function readCacheFile<T>(path: string): CacheData<T> {
-	if (!existsSync(path)) {
-		return { entries: {} };
-	}
+async function readCacheFile<T>(path: string): Promise<CacheData<T>> {
 	try {
-		return JSON.parse(readFileSync(path, "utf-8")) as CacheData<T>;
+		await access(path);
+		const content = await readFile(path, "utf-8");
+		return JSON.parse(content) as CacheData<T>;
 	} catch (err) {
 		log.debug("Failed to read cache file", { path, error: String(err) });
 		return { entries: {} };
 	}
 }
 
-function writeCacheFile<T>(path: string, data: CacheData<T>): void {
-	writeFileSync(path, JSON.stringify(data));
+async function writeCacheFile<T>(
+	path: string,
+	data: CacheData<T>
+): Promise<void> {
+	await ensureCacheDir();
+	await writeFile(path, JSON.stringify(data));
 }
 
 function evictLRU<T extends { ts: number }>(
@@ -83,9 +92,11 @@ function searchCachePath(): string {
 	return join(getCacheDir(), "search-results.json");
 }
 
-export function getCachedEmbedding(text: string): number[] | null {
+export async function getCachedEmbedding(
+	text: string
+): Promise<number[] | null> {
 	const key = hashKey(text);
-	const data = readCacheFile<EmbeddingCacheEntry>(embeddingCachePath());
+	const data = await readCacheFile<EmbeddingCacheEntry>(embeddingCachePath());
 	const entry = data.entries[key];
 	if (entry?.vector) {
 		return entry.vector;
@@ -93,17 +104,22 @@ export function getCachedEmbedding(text: string): number[] | null {
 	return null;
 }
 
-export function setCachedEmbedding(text: string, vector: number[]): void {
+export async function setCachedEmbedding(
+	text: string,
+	vector: number[]
+): Promise<void> {
 	const path = embeddingCachePath();
-	const data = readCacheFile<EmbeddingCacheEntry>(path);
+	const data = await readCacheFile<EmbeddingCacheEntry>(path);
 	const key = hashKey(text);
 	data.entries[key] = { vector, ts: Date.now() };
 	data.entries = evictLRU(data.entries, MAX_EMBEDDING_ENTRIES);
-	writeCacheFile(path, data);
+	await writeCacheFile(path, data);
 }
 
-export function getCachedSearch(queryHash: string): unknown[] | null {
-	const data = readCacheFile<SearchCacheEntry>(searchCachePath());
+export async function getCachedSearch(
+	queryHash: string
+): Promise<unknown[] | null> {
+	const data = await readCacheFile<SearchCacheEntry>(searchCachePath());
 	const entry = data.entries[queryHash];
 	if (!entry) {
 		return null;
@@ -114,12 +130,15 @@ export function getCachedSearch(queryHash: string): unknown[] | null {
 	return entry.results;
 }
 
-export function setCachedSearch(queryHash: string, results: unknown[]): void {
+export async function setCachedSearch(
+	queryHash: string,
+	results: unknown[]
+): Promise<void> {
 	const path = searchCachePath();
-	const data = readCacheFile<SearchCacheEntry>(path);
+	const data = await readCacheFile<SearchCacheEntry>(path);
 	data.entries[queryHash] = { results, ts: Date.now() };
 	data.entries = evictLRU(data.entries, MAX_SEARCH_ENTRIES);
-	writeCacheFile(path, data);
+	await writeCacheFile(path, data);
 }
 
 export function buildSearchCacheKey(
@@ -131,12 +150,15 @@ export function buildSearchCacheKey(
 	return hashKey(raw);
 }
 
-export function clearCache(): void {
+export async function clearCache(): Promise<void> {
 	const dir = getCacheDir();
 	for (const file of ["embeddings.json", "search-results.json"]) {
 		const path = join(dir, file);
-		if (existsSync(path)) {
-			writeFileSync(path, JSON.stringify({ entries: {} }));
+		try {
+			await access(path);
+			await writeFile(path, JSON.stringify({ entries: {} }));
+		} catch {
+			// File doesn't exist, skip
 		}
 	}
 }

@@ -1,14 +1,21 @@
-import { readdirSync, statSync } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { chunkFileSymbols } from "../core/code-chunker.ts";
 import {
-	deleteCodeChunksByPath,
+	deleteCodeChunksByPaths,
 	ensureCodeFtsIndex,
+	getCodeInsights,
 	getIndexedCodePaths,
 	initCodeStore,
 	insertCodeChunks,
 } from "../core/code-store.ts";
 import { embedTexts } from "../core/embedder.ts";
+import {
+	getGitMetadataForFile,
+	getGitRelativePath,
+	isGitAvailable,
+} from "../core/git-metadata.ts";
+import { captureSnapshot } from "../core/metrics-store.ts";
 import {
 	ensureProviderReady,
 	readConfig,
@@ -49,20 +56,20 @@ async function getCurrentCommit(): Promise<string> {
 	return output.trim();
 }
 
-function getFileModifiedTime(filePath: string): string {
+async function getFileModifiedTime(filePath: string): Promise<string> {
 	try {
-		const stat = statSync(filePath);
-		return stat.mtime.toISOString();
+		const stats = await stat(filePath);
+		return stats.mtime.toISOString();
 	} catch {
 		return new Date().toISOString();
 	}
 }
 
-function walkDirectory(dir: string, root: string): string[] {
+async function walkDirectory(dir: string, root: string): Promise<string[]> {
 	const results: string[] = [];
 	let entries: string[];
 	try {
-		entries = readdirSync(dir);
+		entries = await readdir(dir);
 	} catch {
 		return results;
 	}
@@ -72,15 +79,15 @@ function walkDirectory(dir: string, root: string): string[] {
 			continue;
 		}
 		const fullPath = join(dir, entry);
-		let stat: ReturnType<typeof statSync> | null = null;
+		let stats;
 		try {
-			stat = statSync(fullPath);
+			stats = await stat(fullPath);
 		} catch {
 			continue;
 		}
-		if (stat.isDirectory()) {
-			results.push(...walkDirectory(fullPath, root));
-		} else if (stat.isFile()) {
+		if (stats.isDirectory()) {
+			results.push(...(await walkDirectory(fullPath, root)));
+		} else if (stats.isFile()) {
 			const ext = fullPath.slice(fullPath.lastIndexOf("."));
 			if (CODE_EXTENSIONS.has(ext)) {
 				results.push(relative(root, fullPath));
@@ -142,7 +149,7 @@ export async function runCodeIndex(
 	const changedFiles = await getChangedFiles(
 		config.lastCodeIndexCommit ?? null
 	);
-	const allFiles = walkDirectory(root, root);
+	const allFiles = await walkDirectory(root, root);
 
 	const filesToIndex =
 		changedFiles !== null
@@ -164,22 +171,46 @@ export async function runCodeIndex(
 	let totalFiles = 0;
 	const BATCH_SIZE = 20;
 
+	// Check git availability once
+	const gitAvailable = await isGitAvailable();
+	if (gitAvailable) {
+		log("Git available - will extract git metadata");
+	}
+
 	for (let i = 0; i < filesToIndex.length; i += BATCH_SIZE) {
 		const batch = filesToIndex.slice(i, i + BATCH_SIZE);
 		const allBatchChunks: import("../core/code-chunker.ts").CodeChunk[] = [];
+		const pathsToDelete: string[] = [];
 
+		// Collect paths to delete and chunks to insert
 		for (const relPath of batch) {
 			const fullPath = join(root, relPath);
-			const lastModified = getFileModifiedTime(fullPath);
+			const lastModified = await getFileModifiedTime(fullPath);
 
 			try {
-				const chunks = chunkFileSymbols(fullPath, lastModified);
+				const chunks = await chunkFileSymbols(fullPath, lastModified);
 				if (chunks.length === 0) {
 					continue;
 				}
 
+				// Extract git metadata for the file
+				if (gitAvailable) {
+					const gitRelativePath = await getGitRelativePath(fullPath);
+					if (gitRelativePath) {
+						const gitMeta = await getGitMetadataForFile(gitRelativePath);
+						if (gitMeta) {
+							// Enrich all chunks from this file with git metadata
+							for (const chunk of chunks) {
+								chunk.gitChangeCount = gitMeta.changeCount;
+								chunk.gitAuthorCount = gitMeta.authorCount;
+								chunk.gitLastChangeDate = gitMeta.lastChangeDate;
+							}
+						}
+					}
+				}
+
 				if (indexedPaths.has(fullPath)) {
-					await deleteCodeChunksByPath(fullPath);
+					pathsToDelete.push(fullPath);
 				}
 
 				allBatchChunks.push(...chunks);
@@ -187,6 +218,11 @@ export async function runCodeIndex(
 			} catch {
 				// skip files that can't be parsed
 			}
+		}
+
+		// Batch delete old chunks (single SQL query for all paths)
+		if (pathsToDelete.length > 0) {
+			await deleteCodeChunksByPaths(pathsToDelete);
 		}
 
 		if (allBatchChunks.length > 0) {
@@ -213,6 +249,19 @@ export async function runCodeIndex(
 
 	await ensureCodeFtsIndex();
 	updateConfig({ lastCodeIndexCommit: currentCommit });
+
+	// Capture metrics snapshot after indexing
+	log("Capturing metrics snapshot...");
+	try {
+		const insights = await getCodeInsights();
+		if (insights) {
+			await captureSnapshot(insights, currentCommit);
+			log("Metrics snapshot captured");
+		}
+	} catch (err) {
+		log(`Failed to capture metrics snapshot: ${err}`);
+		// Don't fail the indexing if snapshot fails
+	}
 
 	log(`Indexed ${totalChunks} symbols from ${totalFiles} files`);
 	return { totalFiles, totalSymbols: totalChunks, skipped: false };

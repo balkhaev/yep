@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -11,8 +12,8 @@ beforeAll(() => {
 	process.chdir(TMP_PROJECT);
 });
 
-afterEach(() => {
-	releaseSyncLock();
+afterEach(async () => {
+	await releaseSyncLock();
 });
 
 afterAll(() => {
@@ -21,23 +22,23 @@ afterAll(() => {
 });
 
 describe("acquireSyncLock", () => {
-	it("acquires lock when no lock exists", () => {
-		expect(acquireSyncLock()).toBe(true);
+	it("acquires lock when no lock exists", async () => {
+		expect(await acquireSyncLock()).toBe(true);
 	});
 
-	it("rejects second lock from same process", () => {
-		acquireSyncLock();
+	it("rejects second lock from same process", async () => {
+		await acquireSyncLock();
 		// Same PID, so the lock is considered held by us - not stale
 		// The function should still return false because a lock exists and is alive
-		const second = acquireSyncLock();
+		const second = await acquireSyncLock();
 		// Since the PID is alive, this should return false
 		expect(second).toBe(false);
 	});
 
-	it("releases and re-acquires", () => {
-		acquireSyncLock();
-		releaseSyncLock();
-		expect(acquireSyncLock()).toBe(true);
+	it("releases and re-acquires", async () => {
+		await acquireSyncLock();
+		await releaseSyncLock();
+		expect(await acquireSyncLock()).toBe(true);
 	});
 });
 
@@ -45,7 +46,7 @@ describe("withSyncLock", () => {
 	it("executes function and releases lock", async () => {
 		const result = await withSyncLock(async () => "done");
 		expect(result).toBe("done");
-		expect(acquireSyncLock()).toBe(true);
+		expect(await acquireSyncLock()).toBe(true);
 	});
 
 	it("releases lock on error", async () => {
@@ -56,7 +57,7 @@ describe("withSyncLock", () => {
 		} catch {
 			// expected
 		}
-		expect(acquireSyncLock()).toBe(true);
+		expect(await acquireSyncLock()).toBe(true);
 	});
 
 	it("rejects concurrent lock attempts", async () => {

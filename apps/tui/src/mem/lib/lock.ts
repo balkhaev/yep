@@ -1,10 +1,4 @@
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const LOCK_FILE = "sync.lock";
@@ -39,48 +33,48 @@ function isLockStale(lock: LockInfo): boolean {
 	return !isProcessAlive(lock.pid);
 }
 
-export function acquireSyncLock(): boolean {
+export async function acquireSyncLock(): Promise<boolean> {
 	const lockPath = getLockPath();
 	const dir = getLockDir();
 
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
+	try {
+		await access(dir);
+	} catch {
+		await mkdir(dir, { recursive: true });
 	}
 
-	if (existsSync(lockPath)) {
-		try {
-			const raw = readFileSync(lockPath, "utf-8");
-			const lock = JSON.parse(raw) as LockInfo;
-			if (!isLockStale(lock)) {
-				return false;
-			}
-		} catch {
-			// Corrupted lock file — treat as stale
+	try {
+		await access(lockPath);
+		const raw = await readFile(lockPath, "utf-8");
+		const lock = JSON.parse(raw) as LockInfo;
+		if (!isLockStale(lock)) {
+			return false;
 		}
+	} catch {
+		// Lock file doesn't exist or is corrupted — treat as stale
 	}
 
 	const info: LockInfo = { pid: process.pid, ts: Date.now() };
-	writeFileSync(lockPath, JSON.stringify(info));
+	await writeFile(lockPath, JSON.stringify(info));
 	return true;
 }
 
-export function releaseSyncLock(): void {
+export async function releaseSyncLock(): Promise<void> {
 	const lockPath = getLockPath();
 	try {
-		if (existsSync(lockPath)) {
-			const raw = readFileSync(lockPath, "utf-8");
-			const lock = JSON.parse(raw) as LockInfo;
-			if (lock.pid === process.pid) {
-				rmSync(lockPath, { force: true });
-			}
+		await access(lockPath);
+		const raw = await readFile(lockPath, "utf-8");
+		const lock = JSON.parse(raw) as LockInfo;
+		if (lock.pid === process.pid) {
+			await rm(lockPath, { force: true });
 		}
 	} catch {
-		rmSync(lockPath, { force: true });
+		await rm(lockPath, { force: true });
 	}
 }
 
 export async function withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
-	if (!acquireSyncLock()) {
+	if (!(await acquireSyncLock())) {
 		throw new Error(
 			"Another sync operation is in progress. Wait or remove .yep-mem/sync.lock"
 		);
@@ -89,6 +83,6 @@ export async function withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
 	try {
 		return await fn();
 	} finally {
-		releaseSyncLock();
+		await releaseSyncLock();
 	}
 }

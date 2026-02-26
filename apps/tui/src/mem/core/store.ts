@@ -1,8 +1,10 @@
 import { type Connection, connect, Index, type Table } from "@lancedb/lancedb";
 import { getStorePath, getVectorDimensions } from "../lib/config.ts";
 import { createLogger } from "../lib/logger.ts";
+import { LSHIndex } from "../lib/lsh.ts";
 import { escapeSql } from "../lib/sql.ts";
 import type { SolutionChunk } from "./chunker.ts";
+import { getWeightsForQuery } from "./query-intent.ts";
 
 const log = createLogger("store");
 
@@ -311,8 +313,43 @@ function deduplicateResults(
 	vectors: number[][],
 	threshold = 0.95
 ): SearchResult[] {
+	if (results.length === 0 || vectors.length === 0) {
+		return [];
+	}
+
+	// For small result sets, use simple O(n²) approach
+	if (results.length < 50) {
+		const kept: SearchResult[] = [];
+		const keptVectors: number[][] = [];
+
+		for (let i = 0; i < results.length; i++) {
+			const result = results[i];
+			const vector = vectors[i];
+			if (!(result && vector)) {
+				continue;
+			}
+
+			let isDuplicate = false;
+			for (const kv of keptVectors) {
+				if (cosineSimilarity(vector, kv) > threshold) {
+					isDuplicate = true;
+					break;
+				}
+			}
+
+			if (!isDuplicate) {
+				kept.push(result);
+				keptVectors.push(vector);
+			}
+		}
+
+		return kept;
+	}
+
+	// For large result sets, use LSH for O(n log n) performance
+	const dimensions = vectors[0]?.length ?? 0;
+	const lshIndex = new LSHIndex<number>(dimensions);
 	const kept: SearchResult[] = [];
-	const keptVectors: number[][] = [];
 
 	for (let i = 0; i < results.length; i++) {
 		const result = results[i];
@@ -321,17 +358,17 @@ function deduplicateResults(
 			continue;
 		}
 
-		let isDuplicate = false;
-		for (const kv of keptVectors) {
-			if (cosineSimilarity(vector, kv) > threshold) {
-				isDuplicate = true;
-				break;
-			}
-		}
+		// Find similar vectors using LSH
+		const similarIndices = lshIndex.findSimilar(
+			vector,
+			threshold,
+			cosineSimilarity
+		);
 
-		if (!isDuplicate) {
+		// If no duplicates found, keep this result
+		if (similarIndices.length === 0) {
 			kept.push(result);
-			keptVectors.push(vector);
+			lshIndex.add(vector, i);
 		}
 	}
 
@@ -437,18 +474,14 @@ function computeSymbolMatch(queryText: string, embeddingText: string): number {
 	return hits / querySymbols.size;
 }
 
-const RERANK_WEIGHTS = {
-	recency: 0.15,
-	fileOverlap: 0.25,
-	keywordDensity: 0.35,
-	symbolMatch: 0.25,
-};
-
 function rerankResults(
 	results: SearchResult[],
 	queryText: string,
 	filterFiles: string[]
 ): SearchResult[] {
+	// Get adaptive weights based on query intent
+	const weights = getWeightsForQuery(queryText);
+
 	return results
 		.map((r) => {
 			const recency = computeRecencyBoost(r.chunk.timestamp);
@@ -462,10 +495,10 @@ function rerankResults(
 			const symbols = computeSymbolMatch(queryText, r.chunk.embeddingText);
 
 			const boost =
-				RERANK_WEIGHTS.recency * recency +
-				RERANK_WEIGHTS.fileOverlap * fileOverlap +
-				RERANK_WEIGHTS.keywordDensity * keywords +
-				RERANK_WEIGHTS.symbolMatch * symbols;
+				weights.recency * recency +
+				weights.fileOverlap * fileOverlap +
+				weights.keywordDensity * keywords +
+				weights.symbolMatch * symbols;
 
 			return { ...r, score: r.score * (1 + boost) };
 		})

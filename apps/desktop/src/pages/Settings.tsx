@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type MemConfig } from "@/api";
 import AnimatedNumber from "@/components/charts/AnimatedNumber";
+import { FadeInUp } from "@/components/Motion";
+import PageHeader from "@/components/PageHeader";
 
 function ProviderIcon({ provider }: { provider: string }) {
 	if (provider === "openai") {
@@ -144,12 +146,10 @@ export default function Settings() {
 
 	return (
 		<div className="space-y-8">
-			<div className="fade-in-up">
-				<h1 className="font-bold text-2xl tracking-tight">Settings</h1>
-				<p className="mt-1 text-sm text-zinc-500">
-					Configure your AI provider and models
-				</p>
-			</div>
+			<PageHeader
+				subtitle="Configure your AI provider and models"
+				title="Settings"
+			/>
 
 			{error && (
 				<div className="card border-red-900/30 bg-red-950/20 p-4 text-red-400 text-sm">
@@ -157,7 +157,7 @@ export default function Settings() {
 				</div>
 			)}
 
-			<div className="card fade-in-up stagger-1 p-6">
+			<FadeInUp className="card p-6">
 				<div className="mb-5 flex items-center gap-3">
 					<ProviderIcon provider={provider} />
 					<div>
@@ -286,9 +286,9 @@ export default function Settings() {
 						</span>
 					)}
 				</div>
-			</div>
+			</FadeInUp>
 
-			<div className="card fade-in-up stagger-2 p-6">
+			<div className="card p-6">
 				<div className="mb-4 flex items-center justify-between">
 					<h2 className="font-semibold text-sm text-zinc-200">Connection</h2>
 					<button
@@ -320,7 +320,7 @@ export default function Settings() {
 
 			<div className="grid gap-6 lg:grid-cols-2">
 				{config && (
-					<div className="card fade-in-up stagger-3 p-6">
+					<div className="card p-6">
 						<h2 className="mb-4 font-semibold text-sm text-zinc-200">Info</h2>
 						<dl className="space-y-3">
 							<div className="flex items-center justify-between text-sm">
@@ -354,7 +354,7 @@ export default function Settings() {
 				)}
 
 				{stats && (
-					<div className="card fade-in-up stagger-4 p-6">
+					<div className="card p-6">
 						<h2 className="mb-4 font-semibold text-sm text-zinc-200">
 							Storage
 						</h2>
@@ -377,7 +377,7 @@ export default function Settings() {
 				)}
 			</div>
 
-			<div className="card fade-in-up stagger-5 border-red-900/20 bg-red-950/5 p-6">
+			<div className="card border-red-900/20 bg-red-950/5 p-6">
 				<h2 className="mb-1 font-semibold text-red-400 text-sm">Danger Zone</h2>
 				<p className="mb-4 text-sm text-zinc-500">
 					Drop the vector store and recreate it empty. All indexed data will be

@@ -5,25 +5,30 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:gui": "VITE_API_BASE='' vite build --outDir ../tui/gui-dist --emptyOutDir",
+    "build": "tsc -b && vite build && bun run build:gui",
+    "build:gui": "VITE_API_BASE='/api' vite build --outDir ../tui/gui-dist --emptyOutDir",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
     "@tanstack/react-query": "^5.90.21",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-shell": "^2.2.1",
+    "framer-motion": "^12.34.3",
+    "lucide-react": "^0.575.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.6.2",
+    "react-syntax-highlighter": "^15.6.1",
     "recharts": "^3.7.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.5.2",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",

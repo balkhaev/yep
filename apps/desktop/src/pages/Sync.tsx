@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type SyncEvent } from "@/api";
 import AnimatedNumber from "@/components/charts/AnimatedNumber";
 import StepProgress from "@/components/charts/StepProgress";
+import { FadeInUp } from "@/components/Motion";
+import PageHeader from "@/components/PageHeader";
 import { queryKeys } from "@/hooks/queries";
 
 interface LogEntry {
@@ -138,16 +140,14 @@ export default function Sync() {
 			: null;
 
 	return (
-		<div className="space-y-6">
-			<div className="fade-in-up">
-				<h1 className="font-bold text-2xl tracking-tight">Sync</h1>
-				<p className="mt-1 text-sm text-zinc-500">
-					Index new checkpoints into the vector store
-				</p>
-			</div>
+		<div className="space-y-8">
+			<PageHeader
+				subtitle="Index new checkpoints into the vector store"
+				title="Sync"
+			/>
 
 			{(syncing || finished) && (
-				<div className="card fade-in-up stagger-1 space-y-4 p-6">
+				<FadeInUp className="card space-y-4 p-6">
 					<StepProgress
 						completedSteps={completedSteps}
 						currentStep={currentStep}
@@ -161,10 +161,10 @@ export default function Sync() {
 							/>
 						</div>
 					)}
-				</div>
+				</FadeInUp>
 			)}
 
-			<div className="card p-6">
+			<FadeInUp className="card p-6" delay={0.1}>
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-4">
 						{syncing ? (
@@ -234,10 +234,10 @@ export default function Sync() {
 						</div>
 					)}
 				</div>
-			</div>
+			</FadeInUp>
 
 			{logs.length > 0 && (
-				<div className="card fade-in-up overflow-hidden">
+				<FadeInUp className="card overflow-hidden" delay={0.2}>
 					<div className="flex items-center justify-between border-zinc-800/40 border-b px-5 py-3">
 						<span className="font-semibold text-[11px] text-zinc-600 uppercase tracking-widest">
 							Log Output
@@ -278,7 +278,7 @@ export default function Sync() {
 						))}
 						<div ref={logEndRef} />
 					</div>
-				</div>
+				</FadeInUp>
 			)}
 
 			{logs.length === 0 && !syncing && (

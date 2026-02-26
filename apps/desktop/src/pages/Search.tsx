@@ -10,6 +10,8 @@ import AnimatedNumber from "@/components/charts/AnimatedNumber";
 import MiniAreaChart from "@/components/charts/MiniAreaChart";
 import ScoreRing from "@/components/charts/ScoreRing";
 import HighlightText from "@/components/Highlight";
+import { FadeInUp } from "@/components/Motion";
+import PageHeader from "@/components/PageHeader";
 import SearchResultCard from "@/components/SearchResult";
 import { useStatus } from "@/hooks/queries";
 
@@ -60,7 +62,7 @@ function EmptyState({
 	onExampleClick: (query: string) => void;
 }) {
 	return (
-		<div className="fade-in-up flex flex-col items-center justify-center py-16 text-center">
+		<FadeInUp className="flex flex-col items-center justify-center py-16 text-center">
 			<svg
 				aria-hidden="true"
 				className="mb-4 h-10 w-10 text-zinc-700"
@@ -91,7 +93,7 @@ function EmptyState({
 					</button>
 				))}
 			</div>
-		</div>
+		</FadeInUp>
 	);
 }
 
@@ -136,19 +138,15 @@ function SymbolTypeBadge({ type }: { type: string }) {
 
 function CodeResultCard({
 	result,
-	index,
 	query,
 }: {
 	result: UnifiedResult;
-	index: number;
 	query: string;
 }) {
 	const [expanded, setExpanded] = useState(false);
 
 	return (
-		<div
-			className={`card-hover group fade-in-up stagger-${Math.min(index + 1, 8)}`}
-		>
+		<div className="card-hover group">
 			<button
 				className="w-full px-5 py-4 text-left"
 				onClick={() => setExpanded(!expanded)}
@@ -370,25 +368,33 @@ export default function Search() {
 			: unifiedResults.map((r) => r.score);
 
 	return (
-		<div className="space-y-4">
-			<div className="flex gap-1 rounded-xl bg-zinc-900/60 p-1">
-				{SOURCE_TABS.map((tab) => (
-					<button
-						className={`flex-1 rounded-lg px-3 py-2 font-medium text-sm transition-all ${
-							source === tab.value
-								? "bg-zinc-800 text-white shadow-sm"
-								: "text-zinc-500 hover:text-zinc-300"
-						}`}
-						key={tab.value}
-						onClick={() => setSource(tab.value)}
-						type="button"
-					>
-						{tab.label}
-					</button>
-				))}
-			</div>
+		<div className="space-y-8">
+			<PageHeader
+				showBreadcrumbs={false}
+				subtitle="Search your coding sessions and codebase"
+				title="Search"
+			/>
 
-			<form className="flex gap-2" onSubmit={handleSearch}>
+			<FadeInUp>
+				<div className="flex gap-1 rounded-xl bg-zinc-900/60 p-1">
+					{SOURCE_TABS.map((tab) => (
+						<button
+							className={`flex-1 rounded-lg px-3 py-2 font-medium text-sm transition-all ${
+								source === tab.value
+									? "bg-zinc-800 text-white shadow-sm"
+									: "text-zinc-500 hover:text-zinc-300"
+							}`}
+							key={tab.value}
+							onClick={() => setSource(tab.value)}
+							type="button"
+						>
+							{tab.label}
+						</button>
+					))}
+				</div>
+			</FadeInUp>
+
+			<form className="flex gap-3" onSubmit={handleSearch}>
 				<div className="relative flex-1">
 					<input
 						className={`input w-full ${query ? "pr-24" : "pr-20"}`}
@@ -450,7 +456,7 @@ export default function Search() {
 			</form>
 
 			{showFilters && (
-				<div className="card fade-in-up flex flex-wrap gap-4 px-4 py-3">
+				<FadeInUp className="card flex flex-wrap gap-4 px-4 py-3">
 					<label className="flex items-center gap-2 text-sm text-zinc-400">
 						Results
 						<input
@@ -503,7 +509,7 @@ export default function Search() {
 							/>
 						</label>
 					)}
-				</div>
+				</FadeInUp>
 			)}
 
 			{error && (
@@ -556,7 +562,7 @@ export default function Search() {
 				<div className="space-y-3">
 					{unifiedResults.map((r, i) =>
 						r.source === "code" ? (
-							<CodeResultCard index={i} key={r.id} query={query} result={r} />
+							<CodeResultCard key={r.id} query={query} result={r} />
 						) : (
 							<SearchResultCard
 								index={i}

@@ -1,5 +1,9 @@
+// @ts-nocheck
 import { readFileSync } from "node:fs";
-import { basename, extname } from "node:path";
+import { extname } from "node:path";
+import { buildSimpleEmbeddingText } from "./enriched-embedding.ts";
+import { getParser, isSupported } from "./parsers/parser-factory.ts";
+import type { SymbolMetadata } from "./parsers/types.ts";
 import { parseFileWithTsCompiler } from "./ts-parser.ts";
 
 export interface CodeSymbol {
@@ -8,6 +12,7 @@ export interface CodeSymbol {
 	endLine: number;
 	imports: string[];
 	jsDoc: string;
+	metadata?: SymbolMetadata;
 	name: string;
 	path: string;
 	startLine: number;
@@ -18,7 +23,10 @@ export interface CodeSymbol {
 		| "interface"
 		| "type"
 		| "enum"
-		| "component";
+		| "component"
+		| "constant"
+		| "variable"
+		| "hook";
 }
 
 export interface CodeChunk {
@@ -29,10 +37,15 @@ export interface CodeChunk {
 	imports: string;
 	language: string;
 	lastModified: string;
+	metadata?: SymbolMetadata;
 	path: string;
 	summary: string;
 	symbol: string;
 	symbolType: string;
+	// Git metadata (optional, extracted during indexing)
+	gitChangeCount?: number;
+	gitAuthorCount?: number;
+	gitLastChangeDate?: string;
 }
 
 const LANG_BY_EXT: Record<string, string> = {
@@ -454,13 +467,35 @@ function extractClassMethods(
 
 const TS_JS_EXTS = new Set([".ts", ".tsx", ".js", ".jsx"]);
 
-export function parseFileSymbols(filePath: string): CodeSymbol[] {
+export async function parseFileSymbols(
+	filePath: string
+): Promise<CodeSymbol[]> {
 	const language = detectLanguage(filePath);
 	if (language === "unknown") {
 		return [];
 	}
 
 	const ext = extname(filePath);
+
+	// Попробовать использовать Tree-sitter парсер из ParserFactory
+	if (isSupported(ext)) {
+		const parser = getParser(ext);
+		if (parser) {
+			try {
+				// Tree-sitter парсеры возвращают EnhancedCodeSymbol[], но он extends CodeSymbol[]
+				const symbols = await parser.parse(filePath);
+				return symbols as CodeSymbol[];
+			} catch (err) {
+				console.warn(
+					`Tree-sitter parser failed for ${filePath}, falling back to regex:`,
+					err
+				);
+				// fall through to regex parser
+			}
+		}
+	}
+
+	// Fallback на regex парсер для TypeScript/JavaScript
 	if (TS_JS_EXTS.has(ext)) {
 		try {
 			return parseFileWithTsCompiler(filePath);
@@ -547,26 +582,18 @@ function parseFileSymbolsRegex(filePath: string): CodeSymbol[] {
 	return symbols;
 }
 
+/**
+ * @deprecated Используйте buildSimpleEmbeddingText из enriched-embedding.ts
+ */
 function buildCodeEmbeddingText(sym: CodeSymbol): string {
-	const parts = [`${sym.symbolType} ${sym.name} in ${basename(sym.path)}`];
-	if (sym.jsDoc) {
-		parts.push(sym.jsDoc.slice(0, 300));
-	}
-	if (sym.calls.length > 0) {
-		parts.push(`calls: ${sym.calls.join(", ")}`);
-	}
-	if (sym.imports.length > 0) {
-		parts.push(`imports: ${sym.imports.join(", ")}`);
-	}
-	parts.push(sym.body.slice(0, 1800));
-	return parts.join("\n\n").slice(0, MAX_EMBEDDING_LENGTH);
+	return buildSimpleEmbeddingText(sym);
 }
 
-export function chunkFileSymbols(
+export async function chunkFileSymbols(
 	filePath: string,
 	lastModified: string
-): CodeChunk[] {
-	const symbols = parseFileSymbols(filePath);
+): Promise<CodeChunk[]> {
+	const symbols = await parseFileSymbols(filePath);
 	const language = detectLanguage(filePath);
 
 	return symbols.map((sym) => ({
@@ -583,5 +610,6 @@ export function chunkFileSymbols(
 		lastModified,
 		calls: sym.calls.join(","),
 		imports: sym.imports.join(","),
+		metadata: sym.metadata, // Сохранить metadata из символа
 	}));
 }

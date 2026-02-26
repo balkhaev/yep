@@ -189,7 +189,7 @@ export async function runSync(onProgress?: ProgressFn): Promise<SyncResult> {
 		const totalInserted = await indexChunks(allChunks, vectors, changedLocals);
 
 		await ensureFtsIndex();
-		clearCache();
+		await clearCache();
 		updateConfig({ lastIndexedCommit: readConfig().lastIndexedCommit });
 
 		return { totalInserted };

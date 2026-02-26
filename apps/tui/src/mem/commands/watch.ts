@@ -1,7 +1,11 @@
 import { existsSync, watch } from "node:fs";
 import { join } from "node:path";
+import { cyan, dim, green } from "../lib/cli-utils.ts";
 import { requireInit } from "../lib/guards.ts";
+import { createCliLogger } from "../lib/logger.ts";
 import { syncCommand } from "./sync.ts";
+
+const cli = createCliLogger();
 
 const DEBOUNCE_MS = 10_000;
 const MIN_INTERVAL_MS = 30_000;
@@ -11,14 +15,14 @@ export async function watchCommand(): Promise<void> {
 
 	const metadataDir = join(process.cwd(), ".entire", "metadata");
 	if (!existsSync(metadataDir)) {
-		console.error("No .entire/metadata/ directory found.");
-		console.error("Run 'entire enable' first.");
+		cli.error("No .entire/metadata/ directory found.");
+		cli.error("Run 'entire enable' first.");
 		process.exit(1);
 	}
 
-	console.log(`[watch] Monitoring ${metadataDir}`);
-	console.log("[watch] Will auto-sync when changes detected");
-	console.log("[watch] Press Ctrl+C to stop\n");
+	cli.log(`${cyan("[watch]")} Monitoring ${metadataDir}`);
+	cli.log(`${cyan("[watch]")} Will auto-sync when changes detected`);
+	cli.log(`${cyan("[watch]")} Press Ctrl+C to stop\n`);
 
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastSync = 0;
@@ -33,7 +37,9 @@ export async function watchCommand(): Promise<void> {
 		const elapsed = now - lastSync;
 		if (elapsed < MIN_INTERVAL_MS) {
 			const wait = MIN_INTERVAL_MS - elapsed;
-			console.log(`[watch] Throttled, next sync in ${Math.ceil(wait / 1000)}s`);
+			cli.log(
+				`${dim("[watch]")} Throttled, next sync in ${Math.ceil(wait / 1000)}s`
+			);
 			if (!debounceTimer) {
 				debounceTimer = setTimeout(() => {
 					debounceTimer = null;
@@ -45,15 +51,15 @@ export async function watchCommand(): Promise<void> {
 
 		syncing = true;
 		lastSync = now;
-		console.log("\n[watch] Change detected, syncing...");
+		cli.log(`\n${cyan("[watch]")} Change detected, syncing...`);
 
 		syncCommand()
 			.then(() => {
-				console.log("[watch] Sync complete, watching...\n");
+				cli.log(`${green("[watch]")} Sync complete, watching...\n`);
 			})
 			.catch((err) => {
 				const msg = err instanceof Error ? err.message : String(err);
-				console.error(`[watch] Sync failed: ${msg}\n`);
+				cli.error(`Sync failed: ${msg}\n`);
 			})
 			.finally(() => {
 				syncing = false;
@@ -71,7 +77,7 @@ export async function watchCommand(): Promise<void> {
 	});
 
 	process.on("SIGINT", () => {
-		console.log("\n[watch] Stopping...");
+		cli.log(`\n${cyan("[watch]")} Stopping...`);
 		watcher.close();
 		if (debounceTimer) {
 			clearTimeout(debounceTimer);

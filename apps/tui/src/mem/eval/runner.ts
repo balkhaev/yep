@@ -6,7 +6,7 @@ import {
 } from "../core/store.ts";
 import { ensureProviderReady } from "../lib/config.ts";
 import { requireInit } from "../lib/guards.ts";
-import type { GoldenEntry } from "./golden.ts";
+import type { GoldenEntry, QueryIntent } from "./golden.ts";
 import { initGoldenSet, loadGoldenSet } from "./golden.ts";
 import {
 	computeKeywordHits,
@@ -46,16 +46,20 @@ async function runSearch(
 	return toTexts(results);
 }
 
+interface EvalResultWithType extends EvalResult {
+	queryType?: QueryIntent;
+}
+
 async function evaluateMode(
 	goldenSet: GoldenEntry[],
 	mode: SearchMode,
 	topK: number
 ): Promise<{
 	mode: SearchMode;
-	results: EvalResult[];
+	results: EvalResultWithType[];
 	summary: MetricsSummary;
 }> {
-	const results: EvalResult[] = [];
+	const results: EvalResultWithType[] = [];
 
 	for (const entry of goldenSet) {
 		const queryVector = await embedText(entry.query);
@@ -67,15 +71,48 @@ async function evaluateMode(
 			keywordHits,
 			resultTexts,
 			resultIds: entry.expectedIds ?? [],
+			queryType: entry.queryType,
 		});
 	}
 
 	return { mode, results, summary: summarizeMetrics(results) };
 }
 
+function formatBreakdownByType(
+	results: EvalResultWithType[],
+	mode: SearchMode
+): string[] {
+	const byType: Record<string, EvalResult[]> = {};
+
+	for (const result of results) {
+		const type = result.queryType ?? "unknown";
+		if (!byType[type]) {
+			byType[type] = [];
+		}
+		byType[type]?.push(result);
+	}
+
+	const lines: string[] = [];
+	lines.push("");
+	lines.push(`### Breakdown by Query Type (${mode})`);
+	lines.push("");
+	lines.push("| Type | Count | Recall@k | MRR | nDCG |");
+	lines.push("|------|-------|----------|-----|------|");
+
+	for (const [type, typeResults] of Object.entries(byType)) {
+		const summary = summarizeMetrics(typeResults);
+		lines.push(
+			`| ${type} | ${typeResults.length} | ${summary.avgRecall.toFixed(3)} | ${summary.avgMRR.toFixed(3)} | ${summary.avgNDCG.toFixed(3)} |`
+		);
+	}
+
+	return lines;
+}
+
 function formatReport(
 	evaluations: Array<{
 		mode: SearchMode;
+		results: EvalResultWithType[];
 		summary: MetricsSummary;
 	}>
 ): string {
@@ -105,6 +142,10 @@ function formatReport(
 	);
 	lines.push(`**Best mode:** ${best.mode}`);
 
+	// Add breakdown by query type for best mode
+	const breakdown = formatBreakdownByType(best.results, best.mode);
+	lines.push(...breakdown);
+
 	return lines.join("\n");
 }
 
@@ -128,7 +169,7 @@ export async function evalCommand(): Promise<void> {
 	const modes: SearchMode[] = ["vector", "hybrid", "hybrid+rerank"];
 	const evaluations: Array<{
 		mode: SearchMode;
-		results: EvalResult[];
+		results: EvalResultWithType[];
 		summary: MetricsSummary;
 	}> = [];
 

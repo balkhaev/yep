@@ -58,7 +58,15 @@ export async function guiCommand(port = 3838): Promise<void> {
 	const { apiApp } = await import("./api.ts");
 	const indexHtml = join(guiDist, "index.html");
 
-	apiApp.get("/*", async (c) => {
+	// Создаем отдельное приложение Hono для объединения API и статики
+	const { Hono } = await import("hono");
+	const mainApp = new Hono();
+
+	// Монтируем API с префиксом /api
+	mainApp.route("/", apiApp);
+
+	// Добавляем обработчик статических файлов (должен быть ПОСЛЕ API)
+	mainApp.get("/*", async (c) => {
 		const reqPath = c.req.path === "/" ? "/index.html" : c.req.path;
 		const filePath = join(guiDist, reqPath);
 
@@ -77,7 +85,7 @@ export async function guiCommand(port = 3838): Promise<void> {
 
 	const url = `http://localhost:${port}`;
 	console.log(`Starting yep GUI on ${url}`);
-	Bun.serve({ fetch: apiApp.fetch, port });
+	Bun.serve({ fetch: mainApp.fetch, port });
 	openBrowser(url);
 	console.log(`GUI running at ${url}`);
 

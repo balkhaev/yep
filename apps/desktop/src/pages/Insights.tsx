@@ -16,6 +16,13 @@ import {
 	LANG_CHART_COLORS,
 	TYPE_CHART_COLORS,
 } from "@/components/charts/theme";
+import CoChangeTab from "@/components/insights/CoChangeTab";
+import PatternsTab from "@/components/insights/PatternsTab";
+import RiskTab from "@/components/insights/RiskTab";
+import TrendsTab from "@/components/insights/TrendsTab";
+import { LoadingMessage } from "@/components/LoadingState";
+import { FadeInUp, StaggerContainer, StaggerItem } from "@/components/Motion";
+import PageHeader from "@/components/PageHeader";
 import {
 	queryKeys,
 	useCodeInsights,
@@ -24,9 +31,13 @@ import {
 
 const TABS = [
 	{ id: "overview", label: "Overview" },
+	{ id: "trends", label: "Trends" },
+	{ id: "risk", label: "Risk" },
 	{ id: "complexity", label: "Complexity" },
 	{ id: "dependencies", label: "Dependencies" },
 	{ id: "quality", label: "Quality" },
+	{ id: "patterns", label: "Patterns" },
+	{ id: "cochange", label: "Co-Change" },
 	{ id: "directories", label: "Directories" },
 ] as const;
 
@@ -146,8 +157,8 @@ function OverviewTab({ insights }: { insights: CodeInsights }) {
 	const healthData = buildHealthData(insights);
 
 	return (
-		<div className="space-y-6">
-			<div className="card p-6">
+		<StaggerContainer className="space-y-6">
+			<StaggerItem className="card p-6">
 				<div className="flex items-center justify-around">
 					<StatNumber accent label="Symbols" value={insights.totalSymbols} />
 					<div className="h-10 w-px bg-zinc-800" />
@@ -167,10 +178,10 @@ function OverviewTab({ insights }: { insights: CodeInsights }) {
 						value={`${insights.documentationCoverage}%`}
 					/>
 				</div>
-			</div>
+			</StaggerItem>
 
 			<div className="grid gap-6 lg:grid-cols-2">
-				<div className="card p-6">
+				<StaggerItem className="card p-6">
 					<h2 className="mb-4 font-semibold text-sm text-zinc-200">
 						Language Distribution
 					</h2>
@@ -196,9 +207,9 @@ function OverviewTab({ insights }: { insights: CodeInsights }) {
 							))}
 						</div>
 					</div>
-				</div>
+				</StaggerItem>
 
-				<div className="card p-6">
+				<StaggerItem className="card p-6">
 					<h2 className="mb-4 font-semibold text-sm text-zinc-200">
 						Symbol Types
 					</h2>
@@ -224,10 +235,10 @@ function OverviewTab({ insights }: { insights: CodeInsights }) {
 							))}
 						</div>
 					</div>
-				</div>
+				</StaggerItem>
 			</div>
 
-			<div className="card flex flex-col p-6">
+			<StaggerItem className="card flex flex-col p-6">
 				<h2 className="mb-2 font-semibold text-sm text-zinc-200">
 					Codebase Health
 				</h2>
@@ -266,8 +277,8 @@ function OverviewTab({ insights }: { insights: CodeInsights }) {
 						);
 					})}
 				</div>
-			</div>
-		</div>
+			</StaggerItem>
+		</StaggerContainer>
 	);
 }
 
@@ -285,7 +296,7 @@ function ComplexityTab({
 	}));
 
 	return (
-		<div className="space-y-6">
+		<StaggerContainer className="space-y-6">
 			<div className="grid gap-6 lg:grid-cols-3">
 				<div className="card flex flex-col items-center justify-center p-6">
 					<GaugeChart
@@ -317,7 +328,7 @@ function ComplexityTab({
 				</div>
 			</div>
 
-			<div className="card p-6">
+			<StaggerItem className="card p-6">
 				<div className="mb-4">
 					<h2 className="font-semibold text-sm text-zinc-200">
 						Most Complex Symbols
@@ -351,9 +362,9 @@ function ComplexityTab({
 					onClick={onSymbolClick}
 					stacked
 				/>
-			</div>
+			</StaggerItem>
 
-			<div className="card p-6">
+			<StaggerItem className="card p-6">
 				<h2 className="mb-3 font-semibold text-sm text-zinc-200">
 					Largest Symbols
 				</h2>
@@ -370,8 +381,8 @@ function ComplexityTab({
 					}))}
 					onClick={onSymbolClick}
 				/>
-			</div>
-		</div>
+			</StaggerItem>
+		</StaggerContainer>
 	);
 }
 
@@ -397,8 +408,8 @@ function DependenciesTab({
 	}));
 
 	return (
-		<div className="space-y-6">
-			<div className="card p-6">
+		<StaggerContainer className="space-y-6">
+			<StaggerItem className="card p-6">
 				<div className="mb-4 flex items-center justify-between">
 					<div>
 						<h2 className="font-semibold text-sm text-zinc-200">
@@ -443,10 +454,10 @@ function DependenciesTab({
 					onClick={onSymbolClick}
 					stacked
 				/>
-			</div>
+			</StaggerItem>
 
 			{treemapData.length > 0 && (
-				<div className="card p-6">
+				<StaggerItem className="card p-6">
 					<h2 className="mb-1 font-semibold text-sm text-zinc-200">
 						File Density Map
 					</h2>
@@ -460,9 +471,9 @@ function DependenciesTab({
 							navigate(`/code?file=${encodeURIComponent(path)}`)
 						}
 					/>
-				</div>
+				</StaggerItem>
 			)}
-		</div>
+		</StaggerContainer>
 	);
 }
 
@@ -473,11 +484,13 @@ function QualityTab({
 	insights: CodeInsights;
 	onSymbolClick: (name: string) => void;
 }) {
+	const navigate = useNavigate();
 	const [deadExpanded, setDeadExpanded] = useState(false);
 	const [deadFilter, setDeadFilter] = useState("");
 	const [shouldLoadRecs, setShouldLoadRecs] = useState(false);
 	const queryClient = useQueryClient();
-	const { data: recsData, isLoading: recsLoading } = useCodeRecommendations(shouldLoadRecs);
+	const { data: recsData, isLoading: recsLoading } =
+		useCodeRecommendations(shouldLoadRecs);
 
 	const handleGenerate = useCallback(() => {
 		setShouldLoadRecs(true);
@@ -565,7 +578,7 @@ function QualityTab({
 			</div>
 
 			{insights.duplicateClusters.length > 0 && (
-				<div className="card p-6">
+				<StaggerItem className="card p-6">
 					<h2 className="mb-1 font-semibold text-sm text-zinc-200">
 						Duplicate Code Clusters
 					</h2>
@@ -607,11 +620,11 @@ function QualityTab({
 							</div>
 						))}
 					</div>
-				</div>
+				</StaggerItem>
 			)}
 
 			{insights.deadCode.length > 0 && (
-				<div className="card p-6">
+				<StaggerItem className="card p-6">
 					<div className="mb-4 flex items-center justify-between">
 						<div>
 							<h2 className="font-semibold text-sm text-zinc-200">
@@ -645,11 +658,9 @@ function QualityTab({
 					</div>
 					<div className="space-y-1">
 						{deadCodeShown.map((s) => (
-							<button
-								className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-zinc-800/40"
+							<div
+								className="flex w-full items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-zinc-800/40"
 								key={`${s.symbol}-${s.path}`}
-								onClick={() => onSymbolClick(s.symbol)}
-								type="button"
 							>
 								<span
 									className="h-2 w-2 shrink-0 rounded-full"
@@ -658,21 +669,31 @@ function QualityTab({
 											TYPE_CHART_COLORS[s.symbolType] ?? CHART_COLORS.indigo,
 									}}
 								/>
-								<div className="min-w-0 flex-1">
-									<span className="font-mono text-[13px] text-zinc-300">
+								<button
+									className="min-w-0 flex-1 text-left"
+									onClick={() => onSymbolClick(s.symbol)}
+									type="button"
+								>
+									<span className="font-mono text-[13px] text-zinc-300 hover:text-zinc-100">
 										{s.symbol}
 									</span>
 									<span className="ml-2 text-[11px] text-zinc-600">
 										{s.symbolType}
 									</span>
-								</div>
-								<span className="max-w-[200px] shrink-0 truncate text-[11px] text-zinc-600">
+								</button>
+								<button
+									className="max-w-[200px] shrink-0 truncate text-[11px] text-zinc-600 transition-colors hover:text-zinc-400"
+									onClick={() =>
+										navigate(`/diff?file=${encodeURIComponent(s.path)}`)
+									}
+									type="button"
+								>
 									{s.path}
-								</span>
-							</button>
+								</button>
+							</div>
 						))}
 					</div>
-				</div>
+				</StaggerItem>
 			)}
 		</div>
 	);
@@ -686,8 +707,8 @@ function DirectoriesTab({
 	onSymbolClick: (name: string) => void;
 }) {
 	return (
-		<div className="space-y-6">
-			<div className="card p-6">
+		<StaggerContainer className="space-y-6">
+			<StaggerItem className="card p-6">
 				<h2 className="mb-1 font-semibold text-sm text-zinc-200">
 					Directory Breakdown
 				</h2>
@@ -699,8 +720,8 @@ function DirectoriesTab({
 					data={insights.directoryInsights}
 					onSymbolClick={onSymbolClick}
 				/>
-			</div>
-		</div>
+			</StaggerItem>
+		</StaggerContainer>
 	);
 }
 
@@ -757,14 +778,7 @@ export default function Insights() {
 	}, [invalidateAll]);
 
 	if (loading) {
-		return (
-			<div className="flex h-64 items-center justify-center">
-				<div className="flex items-center gap-3 text-sm text-zinc-500">
-					<div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-700 border-t-zinc-400" />
-					Analyzing codebase...
-				</div>
-			</div>
-		);
+		return <LoadingMessage message="Analyzing codebase..." />;
 	}
 
 	const error =
@@ -793,45 +807,47 @@ export default function Insights() {
 	}
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-8">
 			{indexing && <IndexingOverlay message={indexMessage} />}
 
-			<div className="fade-in-up flex items-center justify-between">
-				<div>
-					<h1 className="font-bold text-2xl tracking-tight">Code Insights</h1>
-					<p className="mt-1 text-sm text-zinc-500">
-						AI-powered analysis of your codebase structure
-					</p>
-				</div>
-				<button
-					className="btn-secondary text-xs"
-					disabled={indexing}
-					onClick={handleIndexCode}
-					type="button"
-				>
-					{indexing ? "Indexing..." : "Re-index"}
-				</button>
-			</div>
-
-			<div className="flex gap-1 rounded-xl bg-zinc-900/50 p-1">
-				{TABS.map((tab) => (
+			<PageHeader
+				actions={
 					<button
-						className={`rounded-lg px-4 py-2 font-medium text-xs transition-colors ${
-							activeTab === tab.id
-								? "bg-zinc-800 text-zinc-100 shadow-sm"
-								: "text-zinc-500 hover:text-zinc-300"
-						}`}
-						key={tab.id}
-						onClick={() => setTab(tab.id)}
+						className="btn-secondary text-xs"
+						disabled={indexing}
+						onClick={handleIndexCode}
 						type="button"
 					>
-						{tab.label}
+						{indexing ? "Indexing..." : "Re-index"}
 					</button>
-				))}
-			</div>
+				}
+				subtitle="AI-powered analysis of your codebase structure"
+				title="Code Insights"
+			/>
 
-			<div className="fade-in-up">
+			<FadeInUp>
+				<div className="flex gap-1 rounded-xl bg-zinc-900/50 p-1">
+					{TABS.map((tab) => (
+						<button
+							className={`rounded-lg px-4 py-2 font-medium text-xs transition-colors ${
+								activeTab === tab.id
+									? "bg-zinc-800 text-zinc-100 shadow-sm"
+									: "text-zinc-500 hover:text-zinc-300"
+							}`}
+							key={tab.id}
+							onClick={() => setTab(tab.id)}
+							type="button"
+						>
+							{tab.label}
+						</button>
+					))}
+				</div>
+			</FadeInUp>
+
+			<FadeInUp delay={0.1}>
 				{activeTab === "overview" && <OverviewTab insights={insights} />}
+				{activeTab === "trends" && <TrendsTab />}
+				{activeTab === "risk" && <RiskTab />}
 				{activeTab === "complexity" && (
 					<ComplexityTab
 						insights={insights}
@@ -847,13 +863,15 @@ export default function Insights() {
 				{activeTab === "quality" && (
 					<QualityTab insights={insights} onSymbolClick={handleSymbolClick} />
 				)}
+				{activeTab === "patterns" && <PatternsTab />}
+				{activeTab === "cochange" && <CoChangeTab />}
 				{activeTab === "directories" && (
 					<DirectoriesTab
 						insights={insights}
 						onSymbolClick={handleSymbolClick}
 					/>
 				)}
-			</div>
+			</FadeInUp>
 		</div>
 	);
 }

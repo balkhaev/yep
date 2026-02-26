@@ -1,5 +1,6 @@
 import type { Table } from "@lancedb/lancedb";
 import { createLogger } from "../lib/logger.ts";
+import { LSHIndex } from "../lib/lsh.ts";
 
 const log = createLogger("duplication");
 
@@ -55,6 +56,22 @@ export async function findDuplicateClusters(
 		(r) => r.body && r.body.split("\n").length >= MIN_BODY_LINES
 	);
 
+	if (candidates.length === 0) {
+		return [];
+	}
+
+	// Build LSH index for fast similarity search
+	const dimensions = candidates[0]?.vector.length ?? 0;
+	const lshIndex = new LSHIndex<number>(dimensions);
+
+	// Add all candidates to LSH index
+	for (let i = 0; i < candidates.length; i++) {
+		const candidate = candidates[i];
+		if (candidate?.vector) {
+			lshIndex.add(candidate.vector, i);
+		}
+	}
+
 	const clustered = new Set<string>();
 	const clusters: DuplicateCluster[] = [];
 
@@ -69,7 +86,19 @@ export async function findDuplicateClusters(
 		];
 		let maxSim = 0;
 
-		for (let j = i + 1; j < candidates.length; j++) {
+		// Use LSH to find candidate duplicates
+		const similarIndices = lshIndex.findSimilar(
+			a.vector,
+			SIMILARITY_THRESHOLD,
+			cosine
+		);
+
+		// Check LSH candidates with exact cosine similarity
+		for (const j of similarIndices) {
+			if (j <= i) {
+				continue; // Skip self and already processed
+			}
+
 			const b = candidates[j];
 			if (!b || clustered.has(b.id)) {
 				continue;

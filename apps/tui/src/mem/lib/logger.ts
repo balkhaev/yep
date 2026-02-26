@@ -1,3 +1,10 @@
+import {
+	error as errorIcon,
+	info as infoIcon,
+	success as successIcon,
+	warning as warningIcon,
+} from "./cli-utils.ts";
+
 type LogLevel = "debug" | "info" | "warn" | "error";
 
 const LEVEL_PRIORITY: Record<LogLevel, number> = {
@@ -8,6 +15,8 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
 };
 
 let minLevel: LogLevel = (process.env.YEP_LOG_LEVEL as LogLevel) ?? "info";
+const isQuiet = process.env.YEP_QUIET === "1";
+const isVerbose = process.env.YEP_VERBOSE === "1";
 
 export function setLogLevel(level: LogLevel): void {
 	minLevel = level;
@@ -58,6 +67,50 @@ export function createLogger(module: string): Logger {
 		error(message, meta) {
 			if (shouldLog("error")) {
 				console.error(formatEntry("error", module, message, meta));
+			}
+		},
+	};
+}
+
+// CLI Logger for user-facing output
+export interface CliLogger {
+	error(message: string): void;
+	info(message: string): void;
+	log(message: string): void;
+	progress(message: string): void;
+	success(message: string): void;
+	warning(message: string): void;
+}
+
+export function createCliLogger(): CliLogger {
+	return {
+		success(message: string): void {
+			if (!isQuiet) {
+				console.log(successIcon(message));
+			}
+		},
+		info(message: string): void {
+			if (!isQuiet) {
+				console.log(infoIcon(message));
+			}
+		},
+		warning(message: string): void {
+			if (!isQuiet) {
+				console.log(warningIcon(message));
+			}
+		},
+		error(message: string): void {
+			// Errors are always shown, even in quiet mode
+			console.error(errorIcon(message));
+		},
+		progress(message: string): void {
+			if (!isQuiet && isVerbose) {
+				console.log(message);
+			}
+		},
+		log(message: string): void {
+			if (!isQuiet) {
+				console.log(message);
 			}
 		},
 	};

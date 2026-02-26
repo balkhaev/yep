@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type {
 	CodeInsights,
 	CodeStats,
@@ -11,6 +11,9 @@ import HorizontalBarChart from "@/components/charts/HorizontalBarChart";
 import MiniAreaChart from "@/components/charts/MiniAreaChart";
 import RadarHealth from "@/components/charts/RadarHealth";
 import { CHART_COLORS, LANG_CHART_COLORS } from "@/components/charts/theme";
+import { PageLoading } from "@/components/LoadingState";
+import { StaggerContainer, StaggerItem } from "@/components/Motion";
+import PageHeader from "@/components/PageHeader";
 import StatusCard from "@/components/StatusCard";
 import {
 	useCodeFiles,
@@ -148,68 +151,90 @@ function DashboardContent({
 	const { langDonutData, sparklineData, connectedBarData, healthData } =
 		prepareDashboardData(insights, recent, stats?.totalChunks ?? 0);
 
+	const subtitleText = lastCommit
+		? `Overview of your agent memory · last sync ${lastCommit.slice(0, 7)}`
+		: "Overview of your agent memory";
+
 	return (
 		<div className="space-y-8">
-			<div className="fade-in-up">
-				<h1 className="font-bold text-2xl tracking-tight">Dashboard</h1>
-				<p className="mt-1 text-sm text-zinc-500">
-					Overview of your agent memory
-					{lastCommit && (
-						<span className="ml-2 text-zinc-600">
-							&middot; last sync{" "}
-							<code className="font-mono text-zinc-500">
-								{lastCommit.slice(0, 7)}
-							</code>
-						</span>
-					)}
-				</p>
-			</div>
+			<PageHeader
+				actions={
+					<>
+						<button
+							className="btn-primary"
+							onClick={() => navigate("/sync")}
+							type="button"
+						>
+							Sync Now
+						</button>
+						<button
+							className="btn-secondary"
+							onClick={() => navigate("/search")}
+							type="button"
+						>
+							Search Memory
+						</button>
+					</>
+				}
+				subtitle={subtitleText}
+				title="Dashboard"
+			/>
 
-			<div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-				<StatusCard
-					detail={config?.provider ?? "unknown"}
-					label="Status"
-					value={stats?.hasTable ? "Active" : "Empty"}
-					variant="accent"
-				/>
-				<StatusCard
-					chart={
-						sparklineData.length > 1 ? (
-							<MiniAreaChart
-								className="w-16"
-								data={sparklineData}
-								height={28}
-							/>
-						) : undefined
-					}
-					detail="indexed in vector store"
-					label="Chunks"
-					value={stats?.totalChunks ?? 0}
-				/>
-				<StatusCard
-					detail={stats?.agents.join(", ") || "none detected"}
-					label="Agents"
-					value={stats?.agents.length ?? 0}
-				/>
-				<StatusCard
-					detail={config?.embeddingModel ?? "default"}
-					label="Model"
-					value={config?.provider === "openai" ? "OpenAI" : "Ollama"}
-				/>
-				<StatusCard
-					detail={
-						insights
-							? `${insights.deadCode.length} potential dead`
-							: codeStats?.languages.join(", ") || "run yep index-code"
-					}
-					label="Symbols"
-					value={codeStats?.totalSymbols ?? 0}
-				/>
-			</div>
+			<StaggerContainer className="grid grid-cols-2 gap-6 lg:grid-cols-5">
+				<StaggerItem>
+					<StatusCard
+						detail={config?.provider ?? "unknown"}
+						label="Status"
+						value={stats?.hasTable ? "Active" : "Empty"}
+						variant="accent"
+					/>
+				</StaggerItem>
+				<StaggerItem>
+					<StatusCard
+						chart={
+							sparklineData.length > 1 ? (
+								<MiniAreaChart
+									className="w-16"
+									data={sparklineData}
+									height={28}
+								/>
+							) : undefined
+						}
+						detail="indexed in vector store"
+						label="Chunks"
+						value={stats?.totalChunks ?? 0}
+					/>
+				</StaggerItem>
+				<StaggerItem>
+					<StatusCard
+						detail={stats?.agents.join(", ") || "none detected"}
+						label="Agents"
+						value={stats?.agents.length ?? 0}
+					/>
+				</StaggerItem>
+				<StaggerItem>
+					<StatusCard
+						detail={config?.embeddingModel ?? "default"}
+						label="Model"
+						value={config?.provider === "openai" ? "OpenAI" : "Ollama"}
+					/>
+				</StaggerItem>
+				<StaggerItem>
+					<StatusCard
+						detail={
+							insights
+								? `${insights.deadCode.length} potential dead`
+								: codeStats?.languages.join(", ") || "run yep index-code"
+						}
+						label="Symbols"
+						value={codeStats?.totalSymbols ?? 0}
+					/>
+				</StaggerItem>
+			</StaggerContainer>
 
-			<div className="grid gap-6 lg:grid-cols-2">
+			<StaggerContainer className="grid gap-6 lg:grid-cols-2">
 				{recent.length > 0 && (
-					<div className="card fade-in-up stagger-1 p-6">
+					<StaggerItem className="card p-6">
 						<h2 className="mb-1 font-semibold text-sm text-zinc-200">
 							Recent Activity
 						</h2>
@@ -219,7 +244,7 @@ function DashboardContent({
 						<div className="space-y-1">
 							{recent.map((s, i) => (
 								<button
-									className={`fade-in-up flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-zinc-800/40 stagger-${Math.min(i + 1, 8)}`}
+									className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-zinc-800/40"
 									key={`${s.timestamp}-${i}`}
 									onClick={() => {
 										const q = s.summary || "";
@@ -255,20 +280,45 @@ function DashboardContent({
 												</span>
 											)}
 											{s.filesChanged && (
-												<span className="truncate">
-													{s.filesChanged.split(",").length} file(s)
-												</span>
+												<div className="flex flex-wrap items-center gap-1">
+													{s.filesChanged
+														.split(",")
+														.slice(0, 2)
+														.map((f) => {
+															const trimmed = f.trim();
+															if (!trimmed) {
+																return null;
+															}
+															const fileName =
+																trimmed.split("/").pop() || trimmed;
+															return (
+																<Link
+																	className="badge cursor-pointer font-mono transition-all hover:bg-zinc-700/80 hover:text-zinc-200"
+																	key={trimmed}
+																	onClick={(e) => e.stopPropagation()}
+																	to={`/code?file=${encodeURIComponent(trimmed)}`}
+																>
+																	{fileName}
+																</Link>
+															);
+														})}
+													{s.filesChanged.split(",").length > 2 && (
+														<span className="text-[10px]">
+															+{s.filesChanged.split(",").length - 2}
+														</span>
+													)}
+												</div>
 											)}
 										</div>
 									</div>
 								</button>
 							))}
 						</div>
-					</div>
+					</StaggerItem>
 				)}
 
 				{stats && stats.topFiles.length > 0 && (
-					<div className="card fade-in-up stagger-2 p-6">
+					<StaggerItem className="card p-6">
 						<h2 className="mb-1 font-semibold text-sm text-zinc-200">
 							Most Referenced Files
 						</h2>
@@ -307,13 +357,13 @@ function DashboardContent({
 								</button>
 							))}
 						</div>
-					</div>
+					</StaggerItem>
 				)}
-			</div>
+			</StaggerContainer>
 
-			<div className="grid gap-6 lg:grid-cols-3">
+			<StaggerContainer className="grid gap-6 lg:grid-cols-3">
 				{langDonutData.length > 0 && (
-					<div className="card fade-in-up stagger-3 flex flex-col items-center p-6">
+					<StaggerItem className="card flex flex-col items-center p-6">
 						<h2 className="mb-4 self-start font-semibold text-sm text-zinc-200">
 							Language Mix
 						</h2>
@@ -334,11 +384,11 @@ function DashboardContent({
 								</div>
 							))}
 						</div>
-					</div>
+					</StaggerItem>
 				)}
 
 				{connectedBarData.length > 0 && (
-					<div className="card fade-in-up stagger-4 p-6">
+					<StaggerItem className="card p-6">
 						<div className="mb-4 flex items-center justify-between">
 							<h2 className="font-semibold text-sm text-zinc-200">
 								Top Connected
@@ -367,21 +417,21 @@ function DashboardContent({
 							}
 							stacked
 						/>
-					</div>
+					</StaggerItem>
 				)}
 
 				{healthData.length > 0 && (
-					<div className="card fade-in-up stagger-5 flex flex-col items-center p-6">
+					<StaggerItem className="card flex flex-col items-center p-6">
 						<h2 className="mb-2 self-start font-semibold text-sm text-zinc-200">
 							Codebase Health
 						</h2>
 						<RadarHealth data={healthData} size={200} />
-					</div>
+					</StaggerItem>
 				)}
-			</div>
+			</StaggerContainer>
 
 			{codeFiles.length > 0 && (
-				<div className="card fade-in-up stagger-6 p-6">
+				<StaggerItem className="card p-6">
 					<div className="mb-4 flex items-center justify-between">
 						<div>
 							<h2 className="font-semibold text-sm text-zinc-200">
@@ -416,25 +466,8 @@ function DashboardContent({
 							</button>
 						))}
 					</div>
-				</div>
+				</StaggerItem>
 			)}
-
-			<div className="fade-in-up stagger-7 flex gap-3">
-				<button
-					className="btn-primary"
-					onClick={() => navigate("/sync")}
-					type="button"
-				>
-					Sync Now
-				</button>
-				<button
-					className="btn-secondary"
-					onClick={() => navigate("/search")}
-					type="button"
-				>
-					Search Memory
-				</button>
-			</div>
 		</div>
 	);
 }
@@ -451,14 +484,7 @@ export default function Dashboard() {
 	const { data: insights } = useCodeInsights();
 
 	if (statusLoading) {
-		return (
-			<CenteredMessage>
-				<div className="flex items-center gap-3 text-sm text-zinc-500">
-					<div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-700 border-t-zinc-400" />
-					Loading...
-				</div>
-			</CenteredMessage>
-		);
+		return <PageLoading />;
 	}
 
 	if (statusError) {

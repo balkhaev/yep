@@ -1,3 +1,5 @@
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { api } from "@/api";
@@ -81,8 +83,18 @@ function NavIcon({ name }: { name: string }) {
 	return <>{icons[name]}</>;
 }
 
+const SIDEBAR_STORAGE_KEY = "yep-sidebar-expanded";
+
 export default function Layout({ children }: { children: ReactNode }) {
 	const [connected, setConnected] = useState(false);
+	const [expanded, setExpanded] = useState(() => {
+		const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+		return stored !== null ? stored === "true" : true;
+	});
+
+	useEffect(() => {
+		localStorage.setItem(SIDEBAR_STORAGE_KEY, String(expanded));
+	}, [expanded]);
 
 	useEffect(() => {
 		let active = true;
@@ -102,27 +114,54 @@ export default function Layout({ children }: { children: ReactNode }) {
 
 	return (
 		<div className="flex h-screen">
-			<aside className="flex w-56 flex-col border-zinc-800/40 border-r bg-zinc-900/30">
-				<div className="flex items-center gap-2.5 px-5 pt-7 pb-4">
-					<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600">
+			<motion.aside
+				animate={{ width: expanded ? 224 : 72 }}
+				className="relative flex flex-col border-zinc-800/40 border-r bg-zinc-900/30"
+				transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+			>
+				{/* Header */}
+				<div
+					className={`flex items-center gap-2.5 px-5 pt-7 pb-4 ${expanded ? "" : "justify-center px-3"}`}
+				>
+					<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/20 shadow-lg">
 						<span className="font-bold text-white text-xs">Y</span>
 					</div>
-					<span className="font-semibold tracking-tight">yep-mem</span>
-					<span
-						className={`ml-auto h-2 w-2 rounded-full transition-colors ${connected ? "bg-emerald-400 shadow-[0_0_6px_rgb(52,211,153,0.4)]" : "bg-zinc-600"}`}
-					/>
+					<AnimatePresence mode="wait">
+						{expanded && (
+							<motion.span
+								animate={{ opacity: 1, x: 0 }}
+								className="font-semibold tracking-tight"
+								exit={{ opacity: 0, x: -10 }}
+								initial={{ opacity: 0, x: -10 }}
+								transition={{ duration: 0.2 }}
+							>
+								yep-mem
+							</motion.span>
+						)}
+					</AnimatePresence>
+					{expanded && (
+						<motion.span
+							animate={{ scale: connected ? 1 : 0.9, opacity: 1 }}
+							className={`ml-auto h-2 w-2 rounded-full transition-colors ${connected ? "bg-emerald-400 shadow-[0_0_8px_rgb(52,211,153,0.5)]" : "bg-zinc-600"}`}
+							initial={{ scale: 0.9, opacity: 0.5 }}
+							transition={{ duration: 0.3 }}
+						/>
+					)}
 				</div>
 
+				{/* Nav */}
 				<nav className="flex-1 space-y-0.5 px-3 py-2">
-					<p className="mb-2 px-3 font-semibold text-[10px] text-zinc-600 uppercase tracking-widest">
-						Menu
-					</p>
+					{expanded && (
+						<p className="mb-2 px-3 font-semibold text-[10px] text-zinc-600 uppercase tracking-widest">
+							Menu
+						</p>
+					)}
 					{NAV_ITEMS.map((item) => (
 						<NavLink
 							className={({ isActive }) =>
-								`flex items-center gap-3 rounded-xl px-3 py-2 font-medium text-[13px] transition-all duration-150 ${
+								`flex items-center ${expanded ? "gap-3 px-3" : "justify-center px-0"} relative overflow-hidden rounded-xl py-2.5 font-medium text-[13px] transition-all duration-200 ${
 									isActive
-										? "bg-zinc-800/80 text-white shadow-sm"
+										? "text-white"
 										: "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300"
 								}`
 							}
@@ -130,24 +169,79 @@ export default function Layout({ children }: { children: ReactNode }) {
 							key={item.to}
 							to={item.to}
 						>
-							<NavIcon name={item.icon} />
-							{item.label}
+							{({ isActive }) => (
+								<>
+									{isActive && (
+										<motion.div
+											className="absolute inset-0 rounded-xl bg-gradient-to-r from-indigo-600/90 to-indigo-500/80"
+											layoutId="activeTab"
+											style={{
+												boxShadow: "0 0 20px rgba(99, 102, 241, 0.3)",
+											}}
+											transition={{
+												type: "spring",
+												bounce: 0.2,
+												duration: 0.6,
+											}}
+										/>
+									)}
+									<span className="relative z-10 flex items-center gap-3">
+										<NavIcon name={item.icon} />
+										<AnimatePresence mode="wait">
+											{expanded && (
+												<motion.span
+													animate={{ opacity: 1, x: 0 }}
+													exit={{ opacity: 0, x: -10 }}
+													initial={{ opacity: 0, x: -10 }}
+													transition={{ duration: 0.2 }}
+												>
+													{item.label}
+												</motion.span>
+											)}
+										</AnimatePresence>
+									</span>
+								</>
+							)}
 						</NavLink>
 					))}
 				</nav>
 
-				<div className="border-zinc-800/40 border-t px-5 py-4">
-					<div className="flex items-center gap-2 text-xs text-zinc-600">
-						<span
-							className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-zinc-600"}`}
-						/>
-						{connected ? "Connected" : "Disconnected"}
-					</div>
+				{/* Footer */}
+				<div
+					className={`border-zinc-800/40 border-t ${expanded ? "px-5" : "px-3"} py-4`}
+				>
+					{expanded ? (
+						<div className="flex items-center gap-2 text-xs text-zinc-600">
+							<span
+								className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500 shadow-[0_0_6px_rgb(16,185,129,0.5)]" : "bg-zinc-600"}`}
+							/>
+							{connected ? "Connected" : "Disconnected"}
+						</div>
+					) : (
+						<div className="flex justify-center">
+							<span
+								className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500 shadow-[0_0_8px_rgb(16,185,129,0.6)]" : "bg-zinc-600"}`}
+							/>
+						</div>
+					)}
 				</div>
-			</aside>
+
+				{/* Toggle button */}
+				<button
+					className="absolute top-7 -right-3 z-20 rounded-full border border-zinc-700 bg-zinc-800 p-1.5 text-zinc-400 shadow-lg transition-all duration-200 hover:bg-zinc-700 hover:text-zinc-200"
+					onClick={() => setExpanded(!expanded)}
+					type="button"
+				>
+					{expanded ? (
+						<ChevronLeft className="h-3.5 w-3.5" />
+					) : (
+						<ChevronRight className="h-3.5 w-3.5" />
+					)}
+				</button>
+			</motion.aside>
 
 			<main className="flex-1 overflow-y-auto bg-zinc-950">
-				<div className="mx-auto max-w-4xl px-8 py-8">{children}</div>
+				<div className="mx-auto max-w-7xl px-8 py-8">{children}</div>
 			</main>
 		</div>
 	);

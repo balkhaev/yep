@@ -48,12 +48,12 @@ async function embedTextRaw(text: string): Promise<number[]> {
 }
 
 export async function embedText(text: string): Promise<number[]> {
-	const cached = getCachedEmbedding(text);
+	const cached = await getCachedEmbedding(text);
 	if (cached) {
 		return cached;
 	}
 	const vector = await embedTextRaw(text);
-	setCachedEmbedding(text, vector);
+	await setCachedEmbedding(text, vector);
 	return vector;
 }
 
@@ -80,7 +80,7 @@ export async function embedTexts(
 		if (!text) {
 			continue;
 		}
-		const cached = getCachedEmbedding(text);
+		const cached = await getCachedEmbedding(text);
 		if (cached) {
 			results[i] = cached;
 		} else {
@@ -102,7 +102,7 @@ export async function embedTexts(
 			const text = uncachedTexts[j];
 			if (idx !== undefined && vec && text) {
 				results[idx] = vec;
-				setCachedEmbedding(text, vec);
+				await setCachedEmbedding(text, vec);
 			}
 		}
 	}

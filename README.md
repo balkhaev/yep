@@ -199,4 +199,22 @@ The desktop app includes auto-update support via the Tauri updater plugin.
 - **Strict TypeScript** (`strictNullChecks`, `noUncheckedIndexedAccess`)
 - **Dependabot** for automated dependency updates
 
+### Advanced Features
+
+**Graph Dependencies & PageRank** — code symbol dependency graph with PageRank for popularity scoring. Used in search ranking to boost frequently-used symbols.
+
+**Git Metadata** — automatic extraction of change count, author count, and last change date for every symbol. Used in bug risk scoring and freshness ranking.
+
+**Metrics Snapshots** — automatic daily snapshots of code quality metrics (health score 0-100, complexity, documentation coverage, dead code). View trends with `yep trends`.
+
+**Bug Risk Scoring** — predictive analysis based on 6 factors: complexity (25%), change frequency (20%), author churn (15%), line count (15%), test coverage (15%), documentation (10%). Identifies high-risk symbols before bugs occur.
+
+**Co-Change Analysis** — temporal coupling detection from git history. Identifies files that frequently change together (support + confidence metrics). Use for code review and refactoring decisions.
+
+**Pattern Detection** — heuristic-based detection of architectural patterns (Singleton, Factory, Observer, Builder) and React patterns (HOC, Custom Hooks, Render Props). Also detects anti-patterns (Magic Numbers, Long Parameter List, Deep Nesting).
+
+**Multi-Signal Ranking** — 7-signal search ranking: vector similarity (35%), FTS (20%), exact match (15%), popularity (15%), freshness (5%), complexity (5%), context (5%). Automatic integration in all searches.
+
+See [docs/advanced-features.md](docs/advanced-features.md) and [docs/api-reference.md](docs/api-reference.md) for details.
+
 </details>

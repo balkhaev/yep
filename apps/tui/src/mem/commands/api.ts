@@ -1,3 +1,4 @@
+// API Server - Updated with patterns endpoint fix
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { SSEStreamingApi } from "hono/streaming";
@@ -19,6 +20,7 @@ import {
 	return Number(this);
 };
 
+import { analyzeCoChange } from "../core/co-change-analysis.ts";
 import {
 	findCallees,
 	findCallers,
@@ -29,9 +31,16 @@ import {
 	getCodeStats,
 	getRecentIndexedFiles,
 	listAllSymbols,
+	listAllSymbolsWithDetails,
 } from "../core/code-store.ts";
 import { embedText } from "../core/embedder.ts";
+import { getSnapshotHistory } from "../core/metrics-store.ts";
+import { detectPatterns } from "../core/pattern-detection.ts";
 import { generateRecommendations } from "../core/recommendations.ts";
+import {
+	computeBugRiskScore,
+	computeRiskSummary,
+} from "../core/risk-analysis.ts";
 import {
 	dropTable,
 	getRecentSessions,
@@ -42,6 +51,7 @@ import {
 	unifiedSearch,
 } from "../core/store.ts";
 import { runSync } from "../core/sync-engine.ts";
+import { buildTrendsReport } from "../core/trends.ts";
 import {
 	ensureProviderReady,
 	isInitialized,
@@ -123,7 +133,7 @@ async function runSyncSSE(send: SendFn): Promise<void> {
 	});
 }
 
-const app = new Hono();
+const app = new Hono().basePath("/api");
 
 app.use("/*", cors({ origin: "*" }));
 
@@ -325,6 +335,114 @@ app.post("/index-code", (c) => {
 			await send("error", { message: msg });
 		}
 	});
+});
+
+// ── Analytics endpoints ─────────────────────────────────────
+
+app.get("/trends", async (c) => {
+	const days = Number.parseInt(c.req.query("days") ?? "30", 10);
+	const snapshots = await getSnapshotHistory(days);
+
+	if (snapshots.length === 0) {
+		return c.json({ error: "No metrics snapshots found" }, 404);
+	}
+
+	const report = buildTrendsReport(snapshots);
+	return c.json(report);
+});
+
+app.get("/risk-analysis", async (c) => {
+	const limit = Number.parseInt(c.req.query("limit") ?? "20", 10);
+	const symbols = await listAllSymbolsWithDetails(1000);
+
+	const results = symbols.map((chunk) => ({
+		chunk,
+		risk: computeBugRiskScore(chunk),
+	}));
+
+	const highRisk = results
+		.filter(
+			(r) => r.risk.riskLevel === "high" || r.risk.riskLevel === "critical"
+		)
+		.sort((a, b) => b.risk.score - a.risk.score)
+		.slice(0, limit);
+
+	const summary = computeRiskSummary(results);
+
+	return c.json({
+		highRiskSymbols: highRisk.map(({ chunk, risk }) => ({
+			symbol: chunk.symbol,
+			path: chunk.path,
+			riskLevel: risk.riskLevel,
+			score: risk.score,
+			topFactors: [
+				{ factor: "Complexity", score: risk.complexityScore },
+				{ factor: "Change Frequency", score: risk.changeFrequencyScore },
+				{ factor: "Author Churn", score: risk.authorChurnScore },
+			]
+				.sort((a, b) => b.score - a.score)
+				.slice(0, 3),
+		})),
+		summary,
+	});
+});
+
+app.get("/patterns", async (c) => {
+	try {
+		const symbols = await listAllSymbolsWithDetails(500);
+		const report = detectPatterns(symbols);
+
+		// Transform anti-patterns to match frontend DetectedPattern format
+		const transformedAntiPatterns = report.antiPatterns.map((ap) => ({
+			pattern: ap.antiPattern,
+			category: "anti-pattern" as const,
+			confidence: ap.confidence,
+			symbol: ap.symbol,
+			path: ap.path,
+			description: ap.description,
+		}));
+
+		// Transform patterns to match frontend format
+		const transformedPatterns = report.patterns.map((p) => ({
+			...p,
+			category:
+				p.type === "architectural"
+					? ("architectural" as const)
+					: ("react" as const),
+		}));
+
+		// Calculate summary
+		const architecturalCount = report.patterns.filter(
+			(p) => p.type === "architectural"
+		).length;
+		const reactCount = report.patterns.filter((p) => p.type === "react").length;
+
+		return c.json({
+			patterns: transformedPatterns,
+			antiPatterns: transformedAntiPatterns,
+			summary: {
+				totalPatterns: report.patterns.length,
+				totalAntiPatterns: report.antiPatterns.length,
+				architecturalCount,
+				reactCount,
+			},
+		});
+	} catch (err) {
+		console.error("[patterns] Error:", err);
+		return c.json(
+			{
+				error: "Failed to detect patterns",
+				message: err instanceof Error ? err.message : String(err),
+			},
+			500
+		);
+	}
+});
+
+app.get("/co-change", async (c) => {
+	const days = Number.parseInt(c.req.query("days") ?? "90", 10);
+	const report = await analyzeCoChange(days);
+	return c.json(report);
 });
 
 // ── Debug endpoints ─────────────────────────────────────────

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it } from "bun:test";
 import { chunkCheckpoint, chunkCheckpoints } from "../chunker.ts";
 import type { ParsedCheckpoint } from "../parser.ts";

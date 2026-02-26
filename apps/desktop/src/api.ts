@@ -1,7 +1,7 @@
 const API_BASE =
 	typeof import.meta.env?.VITE_API_BASE === "string"
 		? import.meta.env.VITE_API_BASE
-		: "http://localhost:3838";
+		: "http://localhost:3838/api";
 
 export interface MemConfig {
 	createdAt: string;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { SearchResult as SearchResultType } from "@/api";
 import ScoreRing from "./charts/ScoreRing";
 import HighlightText from "./Highlight";
@@ -94,9 +94,24 @@ export default function SearchResultCard({
 							/>
 						</p>
 						{chunk.filesChanged && (
-							<p className="mt-2 truncate font-mono text-[11px] text-zinc-600">
-								<HighlightText query={query} text={chunk.filesChanged} />
-							</p>
+							<div className="mt-2 flex flex-wrap gap-1">
+								{chunk.filesChanged.split(",").map((f) => {
+									const trimmed = f.trim();
+									if (!trimmed) {
+										return null;
+									}
+									return (
+										<Link
+											className="badge cursor-pointer font-mono transition-all hover:bg-zinc-700/80 hover:text-zinc-200"
+											key={trimmed}
+											onClick={(e) => e.stopPropagation()}
+											to={`/code?file=${encodeURIComponent(trimmed)}`}
+										>
+											{trimmed}
+										</Link>
+									);
+								})}
+							</div>
 						)}
 					</div>
 					<svg

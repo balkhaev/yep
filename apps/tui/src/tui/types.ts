@@ -1,4 +1,15 @@
-export type View = "search" | "code" | "status" | "diff";
+export type View = "search" | "code" | "status" | "diff" | "insights";
+
+export type InsightsTab =
+	| "overview"
+	| "trends"
+	| "risk"
+	| "complexity"
+	| "dependencies"
+	| "quality"
+	| "patterns"
+	| "cochange"
+	| "directories";
 
 export interface MemStats {
 	agents: string[];

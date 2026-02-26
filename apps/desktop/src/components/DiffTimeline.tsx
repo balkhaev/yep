@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { SolutionResult } from "@/api";
 
 interface DiffTimelineProps {
@@ -131,9 +132,14 @@ function TimelineEntry({
 								{result.filesChanged.split(",").map((f) => {
 									const trimmed = f.trim();
 									return trimmed ? (
-										<span className="badge font-mono" key={trimmed}>
+										<Link
+											className="badge cursor-pointer font-mono transition-all hover:bg-zinc-700/80 hover:text-zinc-200"
+											key={trimmed}
+											onClick={(e) => e.stopPropagation()}
+											to={`/code?file=${encodeURIComponent(trimmed)}`}
+										>
 											{trimmed}
-										</span>
+										</Link>
 									) : null;
 								})}
 							</div>
@@ -148,9 +154,14 @@ function TimelineEntry({
 								{result.symbols.split(",").map((s) => {
 									const trimmed = s.trim();
 									return trimmed ? (
-										<span className="badge-accent font-mono" key={trimmed}>
+										<Link
+											className="badge-accent cursor-pointer font-mono transition-all hover:bg-indigo-500/20 hover:text-indigo-300"
+											key={trimmed}
+											onClick={(e) => e.stopPropagation()}
+											to={`/code?symbol=${encodeURIComponent(trimmed)}`}
+										>
 											{trimmed}
-										</span>
+										</Link>
 									) : null;
 								})}
 							</div>

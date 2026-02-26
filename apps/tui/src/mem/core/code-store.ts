@@ -8,6 +8,17 @@ import {
 	calculateComplexity,
 } from "./complexity.ts";
 import { findDuplicateClusters } from "./duplication.ts";
+import {
+	buildGraphEdgesFromCalls,
+	deleteGraphEdgesByFile,
+	insertGraphEdges,
+} from "./graph-store.ts";
+import {
+	clearInsightsCache,
+	getCachedInsights as getSmartCachedInsights,
+	setCachedInsights,
+} from "./insights-cache.ts";
+import { invalidatePageRankCache } from "./pagerank.ts";
 import { getConnection } from "./store.ts";
 
 const log = createLogger("code-store");
@@ -19,10 +30,15 @@ interface CodeRecord {
 	calls: string;
 	commit: string;
 	embeddingText: string;
+	gitAuthorCount?: number;
+	// Git metadata
+	gitChangeCount?: number;
+	gitLastChangeDate?: string;
 	id: string;
 	imports: string;
 	language: string;
 	lastModified: string;
+	metadata?: string; // JSON строка с SymbolMetadata
 	path: string;
 	summary: string;
 	symbol: string;
@@ -35,10 +51,15 @@ export interface CodeResult {
 	body: string;
 	calls: string;
 	commit: string;
+	gitAuthorCount?: number;
+	// Git metadata
+	gitChangeCount?: number;
+	gitLastChangeDate?: string;
 	id: string;
 	imports: string;
 	language: string;
 	lastModified: string;
+	metadata?: string; // JSON строка с SymbolMetadata
 	path: string;
 	summary: string;
 	symbol: string;
@@ -53,14 +74,14 @@ export interface CodeSearchResult {
 let codeTableExistsCache: boolean | null = null;
 let codeTablePromise: Promise<Table> | null = null;
 
-let insightsCache: CodeInsights | null = null;
-
 export function invalidateInsightsCache(): void {
-	insightsCache = null;
+	clearInsightsCache();
 }
 
 export function getCachedInsights(): CodeInsights | null {
-	return insightsCache;
+	// For backwards compatibility - always return null
+	// Real caching happens inside getCodeInsights()
+	return null;
 }
 
 async function codeTableExists(): Promise<boolean> {
@@ -100,6 +121,10 @@ function emptyCodeRecord(): CodeRecord {
 		calls: "",
 		imports: "",
 		vector: new Array(getVectorDimensions()).fill(0) as number[],
+		metadata: "",
+		gitChangeCount: 0,
+		gitAuthorCount: 0,
+		gitLastChangeDate: "",
 	};
 }
 
@@ -122,6 +147,10 @@ function chunkToCodeRecord(
 		calls: chunk.calls,
 		imports: chunk.imports,
 		vector,
+		metadata: chunk.metadata ? JSON.stringify(chunk.metadata) : undefined,
+		gitChangeCount: chunk.gitChangeCount,
+		gitAuthorCount: chunk.gitAuthorCount,
+		gitLastChangeDate: chunk.gitLastChangeDate,
 	};
 }
 
@@ -138,6 +167,10 @@ function rowToCodeResult(row: Record<string, unknown>): CodeResult {
 		lastModified: row.lastModified as string,
 		calls: (row.calls as string) ?? "",
 		imports: (row.imports as string) ?? "",
+		metadata: (row.metadata as string) ?? undefined,
+		gitChangeCount: (row.gitChangeCount as number) ?? undefined,
+		gitAuthorCount: (row.gitAuthorCount as number) ?? undefined,
+		gitLastChangeDate: (row.gitLastChangeDate as string) ?? undefined,
 	};
 }
 
@@ -145,7 +178,13 @@ async function migrateCodeSchema(table: Table): Promise<void> {
 	try {
 		const rows = await table.query().limit(1).toArray();
 		const sample = rows[0] as Record<string, unknown> | undefined;
-		if (sample && !("calls" in sample)) {
+		// Проверяем наличие новых полей (calls, metadata, git-метаданные)
+		if (
+			sample &&
+			(!("calls" in sample) ||
+				!("metadata" in sample) ||
+				!("gitChangeCount" in sample))
+		) {
 			const emptyRow = emptyCodeRecord();
 			await table.add([emptyRow]);
 			await table.delete('id = ""');
@@ -194,7 +233,31 @@ export async function insertCodeChunks(
 		}
 	}
 	await table.add(records);
+
+	// Построить и вставить graph edges из calls/imports
+	const graphEdges: ReturnType<typeof buildGraphEdgesFromCalls> = [];
+	for (const chunk of chunks) {
+		const edges = buildGraphEdgesFromCalls(
+			chunk.symbol,
+			chunk.path,
+			chunk.calls,
+			chunk.imports,
+			commit,
+			chunk.lastModified
+		);
+		graphEdges.push(...edges);
+	}
+
+	if (graphEdges.length > 0) {
+		try {
+			await insertGraphEdges(graphEdges);
+		} catch (err) {
+			log.warn("Failed to insert graph edges", { error: err });
+		}
+	}
+
 	invalidateInsightsCache();
+	invalidatePageRankCache();
 	return records.length;
 }
 
@@ -205,9 +268,61 @@ export async function deleteCodeChunksByPath(path: string): Promise<void> {
 	const table = await getCodeTable();
 	try {
 		await table.delete(`path = '${escapeSql(path)}'`);
+
+		// Также удалить graph edges для этого файла
+		try {
+			await deleteGraphEdgesByFile(path);
+		} catch (err) {
+			log.warn("Failed to delete graph edges", { path, error: err });
+		}
+
 		invalidateInsightsCache();
+		invalidatePageRankCache();
 	} catch (err) {
 		log.warn("Delete by path failed", { path, error: String(err) });
+	}
+}
+
+/**
+ * Batch delete code chunks by paths (single SQL query)
+ * Much faster than calling deleteCodeChunksByPath() for each path
+ */
+export async function deleteCodeChunksByPaths(paths: string[]): Promise<void> {
+	if (paths.length === 0 || !(await codeTableExists())) {
+		return;
+	}
+
+	// For single path, use the simple version
+	if (paths.length === 1) {
+		const path = paths[0];
+		if (path) {
+			await deleteCodeChunksByPath(path);
+		}
+		return;
+	}
+
+	const table = await getCodeTable();
+	try {
+		// Build SQL: DELETE WHERE path IN ('file1.ts', 'file2.ts', ...)
+		const escapedPaths = paths.map((p) => `'${escapeSql(p)}'`).join(", ");
+		await table.delete(`path IN (${escapedPaths})`);
+
+		// Также удалить graph edges для всех файлов
+		for (const path of paths) {
+			try {
+				await deleteGraphEdgesByFile(path);
+			} catch (err) {
+				log.warn("Failed to delete graph edges", { path, error: err });
+			}
+		}
+
+		invalidateInsightsCache();
+		invalidatePageRankCache();
+	} catch (err) {
+		log.warn("Batch delete by paths failed", {
+			pathCount: paths.length,
+			error: String(err),
+		});
 	}
 }
 
@@ -494,6 +609,20 @@ export async function listAllSymbols(
 		symbolType: r.symbolType as string,
 		path: r.path as string,
 	}));
+}
+
+/**
+ * Получить все символы с полными данными для анализа рисков
+ */
+export async function listAllSymbolsWithDetails(
+	limit = 1000
+): Promise<CodeResult[]> {
+	if (!(await codeTableExists())) {
+		return [];
+	}
+	const table = await getCodeTable();
+	const rows = await table.query().limit(limit).toArray();
+	return (rows as Record<string, unknown>[]).map(rowToCodeResult);
 }
 
 export async function getRecentIndexedFiles(
@@ -809,15 +938,27 @@ function computeDirectoryInsights(
 }
 
 export async function getCodeInsights(): Promise<CodeInsights | null> {
-	if (insightsCache) {
-		return insightsCache;
-	}
-
 	if (!(await codeTableExists())) {
 		return null;
 	}
 
 	const table = await getCodeTable();
+
+	// Get current record count for cache validation
+	const countRows = (await table
+		.query()
+		.select(["id"])
+		.limit(10_001)
+		.toArray()) as Array<{ id: string }>;
+	const totalSymbols = countRows.length;
+
+	// Check if cache is valid
+	const cached = getSmartCachedInsights(totalSymbols);
+	if (cached) {
+		return cached;
+	}
+
+	// Cache miss - compute insights
 	const rows = (await table
 		.query()
 		.select([
@@ -836,8 +977,6 @@ export async function getCodeInsights(): Promise<CodeInsights | null> {
 	if (rows.length === 0) {
 		return null;
 	}
-
-	const totalSymbols = rows.length;
 	const graph = buildDependencyGraph(rows);
 	const dist = computeDistributions(rows, totalSymbols);
 
@@ -1043,7 +1182,7 @@ export async function getCodeInsights(): Promise<CodeInsights | null> {
 		typeDistribution: dist.typeDistribution,
 	};
 
-	insightsCache = result;
+	setCachedInsights(result, totalSymbols);
 	return result;
 }
 

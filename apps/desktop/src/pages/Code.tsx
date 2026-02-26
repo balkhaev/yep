@@ -1,16 +1,42 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
 	api,
-	type CodeResult,
 	type CodeStats,
 	type FileInfo,
 	type SymbolContext,
 	type SymbolInfo,
 } from "@/api";
-import DependencyGraph from "@/components/charts/DependencyGraph";
+
+// Утилита для извлечения относительного пути
+function getRelativePath(fullPath: string): string {
+	// Если путь уже относительный, вернуть как есть
+	if (!fullPath.startsWith("/")) {
+		return fullPath;
+	}
+
+	// Попробовать найти корень проекта (apps/, src/, packages/ и т.д.)
+	const projectRoots = ["apps/", "src/", "packages/", "lib/"];
+	for (const root of projectRoots) {
+		const index = fullPath.indexOf(root);
+		if (index !== -1) {
+			return fullPath.slice(index);
+		}
+	}
+
+	// Если не нашли корень, вернуть имя файла и родительские папки
+	const parts = fullPath.split("/");
+	return parts.slice(-3).join("/");
+}
+
+import FileDetailPanel from "@/components/code/FileDetailPanel";
+import SymbolDetailPanel from "@/components/code/SymbolDetailPanel";
+import SymbolTypeBadge from "@/components/code/SymbolTypeBadge";
 import FileTreemap from "@/components/charts/FileTreemap";
 import { CHART_COLORS, TYPE_CHART_COLORS } from "@/components/charts/theme";
+import { LoadingMessage } from "@/components/LoadingState";
+import PageHeader from "@/components/PageHeader";
+import { useCodeInsights } from "@/hooks/queries";
 
 const SYMBOL_TYPES = [
 	"all",
@@ -21,220 +47,8 @@ const SYMBOL_TYPES = [
 	"component",
 ] as const;
 
-function SymbolTypeBadge({ type }: { type: string }) {
-	const colors: Record<string, string> = {
-		function: "text-blue-400 bg-blue-500/10",
-		class: "text-purple-400 bg-purple-500/10",
-		interface: "text-cyan-400 bg-cyan-500/10",
-		type: "text-green-400 bg-green-500/10",
-		component: "text-orange-400 bg-orange-500/10",
-	};
-	return (
-		<span
-			className={`rounded-lg px-2 py-0.5 font-semibold text-[10px] uppercase tracking-wider ${colors[type] ?? "bg-zinc-800 text-zinc-400"}`}
-		>
-			{type}
-		</span>
-	);
-}
-
-function RelationSection({
-	title,
-	items,
-	onSelect,
-}: {
-	items: CodeResult[];
-	onSelect: (name: string) => void;
-	title: string;
-}) {
-	if (items.length === 0) {
-		return null;
-	}
-	return (
-		<div>
-			<p className="mb-2 font-semibold text-[11px] text-zinc-600 uppercase tracking-widest">
-				{title}
-			</p>
-			<div className="space-y-1">
-				{items.map((item) => (
-					<button
-						className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-zinc-800/60"
-						key={item.id}
-						onClick={() => onSelect(item.symbol)}
-						type="button"
-					>
-						<SymbolTypeBadge type={item.symbolType} />
-						<span className="font-mono text-xs text-zinc-300">
-							{item.symbol}
-						</span>
-						<span className="ml-auto truncate text-[10px] text-zinc-600">
-							{item.path}
-						</span>
-					</button>
-				))}
-			</div>
-		</div>
-	);
-}
-
-function CopyButton({ text }: { text: string }) {
-	const [copied, setCopied] = useState(false);
-	return (
-		<button
-			className={`rounded-lg px-2 py-1 text-[10px] transition-colors ${
-				copied
-					? "bg-emerald-500/10 text-emerald-400"
-					: "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
-			}`}
-			onClick={() => {
-				navigator.clipboard.writeText(text);
-				setCopied(true);
-				setTimeout(() => setCopied(false), 2000);
-			}}
-			type="button"
-		>
-			{copied ? "Copied!" : "Copy"}
-		</button>
-	);
-}
-
-function SymbolDetailPanel({
-	loading,
-	context,
-	onSelectSymbol,
-}: {
-	context: SymbolContext | null;
-	loading: boolean;
-	onSelectSymbol: (name: string) => void;
-}) {
-	if (loading) {
-		return (
-			<div className="w-1/2">
-				<div className="flex h-32 items-center justify-center">
-					<div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-700 border-t-zinc-400" />
-				</div>
-			</div>
-		);
-	}
-
-	if (!context) {
-		return (
-			<div className="w-1/2">
-				<div className="card p-5">
-					<p className="text-sm text-zinc-500">Symbol not found in index</p>
-				</div>
-			</div>
-		);
-	}
-
-	const { definition } = context;
-	const hasRelations =
-		context.callers.length > 0 ||
-		context.callees.length > 0 ||
-		context.importers.length > 0;
-
-	const commitShort = definition.commit ? definition.commit.slice(0, 7) : null;
-	const lastMod = definition.lastModified
-		? new Date(definition.lastModified).toLocaleDateString("en-US", {
-				month: "short",
-				day: "numeric",
-				year: "numeric",
-			})
-		: null;
-	const lineCount = definition.body ? definition.body.split("\n").length : 0;
-
-	return (
-		<div className="w-1/2 space-y-4">
-			<div className="card fade-in-up space-y-4 p-5">
-				<div>
-					<div className="mb-2 flex items-center gap-2">
-						<SymbolTypeBadge type={definition.symbolType} />
-						<span className="font-mono font-semibold text-sm text-zinc-200">
-							{definition.symbol}
-						</span>
-						<span className="badge ml-auto">{definition.language}</span>
-					</div>
-					<p className="font-mono text-[11px] text-zinc-600">
-						{definition.path}
-					</p>
-					<div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-600">
-						{commitShort && (
-							<span className="rounded-md bg-zinc-800/60 px-1.5 py-0.5 font-mono">
-								{commitShort}
-							</span>
-						)}
-						{lastMod && (
-							<span className="rounded-md bg-zinc-800/60 px-1.5 py-0.5">
-								{lastMod}
-							</span>
-						)}
-						{lineCount > 0 && (
-							<span className="rounded-md bg-zinc-800/60 px-1.5 py-0.5">
-								{lineCount} lines
-							</span>
-						)}
-					</div>
-				</div>
-
-				{definition.summary && (
-					<p className="text-[13px] text-zinc-400 leading-relaxed">
-						{definition.summary}
-					</p>
-				)}
-
-				{hasRelations && (
-					<DependencyGraph
-						callees={context.callees}
-						callers={context.callers}
-						center={{
-							symbol: definition.symbol,
-							symbolType: definition.symbolType,
-						}}
-						importers={context.importers}
-						onSelect={onSelectSymbol}
-						size={280}
-					/>
-				)}
-
-				{definition.body && (
-					<div>
-						<div className="mb-2 flex items-center justify-between">
-							<p className="font-semibold text-[11px] text-zinc-600 uppercase tracking-widest">
-								Source
-							</p>
-							<CopyButton text={definition.body} />
-						</div>
-						<pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-xl bg-zinc-950/80 p-4 font-mono text-xs text-zinc-300 leading-relaxed">
-							{definition.body}
-						</pre>
-					</div>
-				)}
-
-				<RelationSection
-					items={context.callers}
-					onSelect={onSelectSymbol}
-					title="Called by"
-				/>
-				<RelationSection
-					items={context.callees}
-					onSelect={onSelectSymbol}
-					title="Calls"
-				/>
-				<RelationSection
-					items={context.importers}
-					onSelect={onSelectSymbol}
-					title="Imported by"
-				/>
-
-				{!hasRelations && (
-					<p className="text-xs text-zinc-600">No relationships found</p>
-				)}
-			</div>
-		</div>
-	);
-}
-
 export default function Code() {
+	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const initialFile = searchParams.get("file") ?? "";
 	const initialSymbol = searchParams.get("symbol") ?? "";
@@ -257,6 +71,9 @@ export default function Code() {
 		null
 	);
 	const [contextLoading, setContextLoading] = useState(false);
+	const [selectedFile, setSelectedFile] = useState<string | null>(null);
+
+	const { data: insights } = useCodeInsights();
 
 	useEffect(() => {
 		Promise.all([
@@ -320,14 +137,7 @@ export default function Code() {
 	}));
 
 	if (loading) {
-		return (
-			<div className="flex h-64 items-center justify-center">
-				<div className="flex items-center gap-3 text-sm text-zinc-500">
-					<div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-700 border-t-zinc-400" />
-					Loading code index...
-				</div>
-			</div>
-		);
+		return <LoadingMessage message="Loading code index..." />;
 	}
 
 	if (!codeStats?.hasTable) {
@@ -351,37 +161,36 @@ export default function Code() {
 	}
 
 	return (
-		<div className="space-y-6">
-			<div className="flex items-end justify-between">
-				<div>
-					<h1 className="font-bold text-2xl tracking-tight">Code Index</h1>
-					<p className="mt-1 text-sm text-zinc-500">
-						{codeStats.totalSymbols} symbols across{" "}
-						{codeStats.languages.join(", ")}
-					</p>
-				</div>
-				<div className="flex gap-1 rounded-xl bg-zinc-900/60 p-1">
-					{(["symbols", "files", "treemap"] as const).map((v) => (
-						<button
-							className={`rounded-lg px-3 py-1.5 font-medium text-xs transition-all ${
-								view === v
-									? "bg-zinc-800 text-white shadow-sm"
-									: "text-zinc-500 hover:text-zinc-300"
-							}`}
-							key={v}
-							onClick={() => {
-								setView(v);
-								if (v !== "files") {
-									setSearchParams({});
-								}
-							}}
-							type="button"
-						>
-							{v === "treemap" ? "Map" : v.charAt(0).toUpperCase() + v.slice(1)}
-						</button>
-					))}
-				</div>
-			</div>
+		<div className="space-y-8">
+			<PageHeader
+				actions={
+					<div className="flex gap-1 rounded-xl bg-zinc-900/60 p-1">
+						{(["symbols", "files", "treemap"] as const).map((v) => (
+							<button
+								className={`rounded-lg px-3 py-1.5 font-medium text-xs transition-all ${
+									view === v
+										? "bg-zinc-800 text-white shadow-sm"
+										: "text-zinc-500 hover:text-zinc-300"
+								}`}
+								key={v}
+								onClick={() => {
+									setView(v);
+									if (v !== "files") {
+										setSearchParams({});
+									}
+								}}
+								type="button"
+							>
+								{v === "treemap"
+									? "Map"
+									: v.charAt(0).toUpperCase() + v.slice(1)}
+							</button>
+						))}
+					</div>
+				}
+				subtitle={`${codeStats.totalSymbols} symbols across ${codeStats.languages.join(", ")}`}
+				title="Code Index"
+			/>
 
 			{view === "symbols" && (
 				<>
@@ -457,7 +266,13 @@ export default function Code() {
 						{selectedSymbol && (
 							<SymbolDetailPanel
 								context={symbolContext}
+								insights={insights ?? null}
 								loading={contextLoading}
+								onNavigateToHistory={(path) =>
+									navigate(
+										`/diff?file=${encodeURIComponent(getRelativePath(path))}`
+									)
+								}
 								onSelectSymbol={selectSymbol}
 							/>
 						)}
@@ -466,58 +281,77 @@ export default function Code() {
 			)}
 
 			{view === "files" && (
-				<div className="space-y-2">
-					{initialFile && (
-						<div className="flex items-center gap-2">
-							<span className="text-xs text-zinc-600">
-								Filtered by: {initialFile}
-							</span>
-							<button
-								className="text-xs text-zinc-500 hover:text-zinc-300"
-								onClick={() => setSearchParams({})}
-								type="button"
-							>
-								Clear
-							</button>
-						</div>
-					)}
-					<div className="card">
-						<div className="border-zinc-800/40 border-b px-5 py-3">
-							<div className="flex items-center font-semibold text-[11px] text-zinc-600 uppercase tracking-widest">
-								<span className="flex-1">Path</span>
-								<span className="w-20 text-center">Symbols</span>
-								<span className="w-32 text-right">Last Modified</span>
+				<div className="flex gap-6">
+					<div className={`space-y-2 ${selectedFile ? "w-1/2" : "w-full"}`}>
+						{initialFile && (
+							<div className="flex items-center gap-2">
+								<span className="text-xs text-zinc-600">
+									Filtered by: {initialFile}
+								</span>
+								<button
+									className="text-xs text-zinc-500 hover:text-zinc-300"
+									onClick={() => setSearchParams({})}
+									type="button"
+								>
+									Clear
+								</button>
+							</div>
+						)}
+						<div className="card">
+							<div className="border-zinc-800/40 border-b px-5 py-3">
+								<div className="flex items-center font-semibold text-[11px] text-zinc-600 uppercase tracking-widest">
+									<span className="flex-1">Path</span>
+									<span className="w-20 text-center">Symbols</span>
+									<span className="w-32 text-right">Last Modified</span>
+								</div>
+							</div>
+							<div className="max-h-[65vh] overflow-y-auto">
+								{filteredFiles.map((f) => (
+									<button
+										className={`flex w-full items-center border-zinc-800/20 border-b px-5 py-3 text-left transition-colors last:border-0 ${
+											selectedFile === f.path
+												? "bg-zinc-800/80 ring-1 ring-zinc-700"
+												: "hover:bg-zinc-800/30"
+										}`}
+										key={f.path}
+										onClick={() => setSelectedFile(f.path)}
+										type="button"
+									>
+										<span className="min-w-0 flex-1 truncate font-mono text-[12px] text-zinc-300">
+											{f.path}
+										</span>
+										<span className="w-20 text-center">
+											<span className="badge">{f.symbolCount}</span>
+										</span>
+										<span className="w-32 text-right text-[11px] text-zinc-600">
+											{f.lastModified
+												? new Date(f.lastModified).toLocaleDateString("en-US", {
+														month: "short",
+														day: "numeric",
+													})
+												: "\u2014"}
+										</span>
+									</button>
+								))}
+								{filteredFiles.length === 0 && (
+									<p className="py-8 text-center text-sm text-zinc-600">
+										No indexed files
+									</p>
+								)}
 							</div>
 						</div>
-						<div className="max-h-[65vh] overflow-y-auto">
-							{filteredFiles.map((f) => (
-								<div
-									className="flex items-center border-zinc-800/20 border-b px-5 py-3 transition-colors last:border-0 hover:bg-zinc-800/30"
-									key={f.path}
-								>
-									<span className="min-w-0 flex-1 truncate font-mono text-[12px] text-zinc-300">
-										{f.path}
-									</span>
-									<span className="w-20 text-center">
-										<span className="badge">{f.symbolCount}</span>
-									</span>
-									<span className="w-32 text-right text-[11px] text-zinc-600">
-										{f.lastModified
-											? new Date(f.lastModified).toLocaleDateString("en-US", {
-													month: "short",
-													day: "numeric",
-												})
-											: "\u2014"}
-									</span>
-								</div>
-							))}
-							{filteredFiles.length === 0 && (
-								<p className="py-8 text-center text-sm text-zinc-600">
-									No indexed files
-								</p>
-							)}
-						</div>
 					</div>
+
+					{selectedFile && (
+						<FileDetailPanel
+							onSelectSymbol={(name) => {
+								setView("symbols");
+								selectSymbol(name);
+								setSelectedFile(null);
+							}}
+							path={selectedFile}
+						/>
+					)}
 				</div>
 			)}
 

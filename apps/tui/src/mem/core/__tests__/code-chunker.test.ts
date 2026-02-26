@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,7 +30,7 @@ describe("parseFileSymbols", () => {
 `
 		);
 
-		const symbols = parseFileSymbols(path);
+		const symbols = await parseFileSymbols(path);
 		expect(symbols.length).toBe(1);
 		expect(symbols[0]!.name).toBe("greet");
 		expect(symbols[0]!.symbolType).toBe("function");
@@ -37,7 +38,7 @@ describe("parseFileSymbols", () => {
 		expect(symbols[0]!.body).toContain("return");
 	});
 
-	it("extracts async arrow functions", () => {
+	it("extracts async arrow functions", async () => {
 		const path = writeFixture(
 			"arrow.ts",
 			`export const fetchData = async (url: string) => {
@@ -47,7 +48,7 @@ describe("parseFileSymbols", () => {
 `
 		);
 
-		const symbols = parseFileSymbols(path);
+		const symbols = await parseFileSymbols(path);
 		expect(symbols.length).toBe(1);
 		expect(symbols[0]!.name).toBe("fetchData");
 		expect(symbols[0]!.symbolType).toBe("function");

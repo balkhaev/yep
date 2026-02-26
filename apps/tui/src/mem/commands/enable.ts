@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { initStore } from "../core/store.ts";
+import { bold, cyan, dim, green, yellow } from "../lib/cli-utils.ts";
 import {
 	ensureMemDir,
 	isInitialized,
@@ -9,13 +10,9 @@ import {
 	writeConfig,
 } from "../lib/config.ts";
 import { checkpointBranchExists } from "../lib/git.ts";
+import { createCliLogger } from "../lib/logger.ts";
 
-const DIM = "\x1b[2m";
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const GREEN = "\x1b[32m";
-const YELLOW = "\x1b[33m";
-const CYAN = "\x1b[36m";
+const cli = createCliLogger();
 
 async function exec(cmd: string): Promise<{ ok: boolean; output: string }> {
 	const proc = Bun.spawn(["sh", "-c", cmd], {
@@ -41,23 +38,23 @@ async function execInteractive(cmd: string): Promise<boolean> {
 }
 
 function ok(msg: string): void {
-	console.log(`  ${GREEN}✓${RESET} ${msg}`);
+	cli.log(`  ${green("✓")} ${msg}`);
 }
 
 function info(msg: string): void {
-	console.log(`  ${CYAN}→${RESET} ${msg}`);
+	cli.log(`  ${cyan("→")} ${msg}`);
 }
 
 function skipped(msg: string): void {
-	console.log(`  ${DIM}- ${msg}${RESET}`);
+	cli.log(`  ${dim(`- ${msg}`)}`);
 }
 
 function warning(msg: string): void {
-	console.log(`  ${YELLOW}!${RESET} ${msg}`);
+	cli.log(`  ${yellow("!")} ${msg}`);
 }
 
 function hint(msg: string): void {
-	console.log(`    ${DIM}${msg}${RESET}`);
+	cli.log(`    ${dim(msg)}`);
 }
 
 function setupMemDir(): void {
@@ -83,14 +80,14 @@ async function setupEntire(
 	}
 
 	if (existsSync(join(repoRoot, ".entire"))) {
-		skipped(`Entire already enabled ${DIM}(${version})${RESET}`);
+		skipped(`Entire already enabled ${dim(`(${version})`)}`);
 		return { ready: true, version };
 	}
 
-	ok(`Entire found ${DIM}(${version})${RESET}`);
-	console.log("");
+	ok(`Entire found ${dim(`(${version})`)}`);
+	cli.log("");
 	const success = await execInteractive("entire enable");
-	console.log("");
+	cli.log("");
 
 	if (success) {
 		ok("Entire enabled");
@@ -282,40 +279,30 @@ async function runInitialSync(): Promise<void> {
 }
 
 function printSummary(): void {
-	console.log("");
-	console.log(
-		`  ${GREEN}${BOLD}Your agent is now enhanced with memory.${RESET}`
+	cli.log("");
+	cli.log(`  ${green(bold("Your agent is now enhanced with memory."))}`);
+	cli.log("");
+	cli.log(
+		`  ${dim("Every commit is automatically indexed. Before each task,")}`
 	);
-	console.log("");
-	console.log(
-		`  ${DIM}Every commit is automatically indexed. Before each task,${RESET}`
+	cli.log(`  ${dim("your agent retrieves relevant past solutions via MCP.")}`);
+	cli.log("");
+	cli.log(`  ${bold("How it works:")}`);
+	cli.log(`    ${dim("1.")} Entire captures AI sessions as checkpoints`);
+	cli.log(`    ${dim("2.")} Post-commit hook indexes them into a vector store`);
+	cli.log(
+		`    ${dim("3.")} Agents call ${cyan("search_solutions")} via MCP to get context`
 	);
-	console.log(
-		`  ${DIM}your agent retrieves relevant past solutions via MCP.${RESET}`
+	cli.log("");
+	cli.log(`  ${bold("Commands:")}`);
+	cli.log(
+		`    ${cyan("yep sync")}          ${dim("Index new checkpoints manually")}`
 	);
-	console.log("");
-	console.log(`  ${BOLD}How it works:${RESET}`);
-	console.log(
-		`    ${DIM}1.${RESET} Entire captures AI sessions as checkpoints`
+	cli.log(`    ${cyan('yep search "..."')}  ${dim("Search past solutions")}`);
+	cli.log(
+		`    ${cyan("yep serve")}         ${dim("Start MCP server (auto in Cursor)")}`
 	);
-	console.log(
-		`    ${DIM}2.${RESET} Post-commit hook indexes them into a vector store`
-	);
-	console.log(
-		`    ${DIM}3.${RESET} Agents call ${CYAN}search_solutions${RESET} via MCP to get context`
-	);
-	console.log("");
-	console.log(`  ${BOLD}Commands:${RESET}`);
-	console.log(
-		`    ${CYAN}yep sync${RESET}          ${DIM}Index new checkpoints manually${RESET}`
-	);
-	console.log(
-		`    ${CYAN}yep search "..."${RESET}  ${DIM}Search past solutions${RESET}`
-	);
-	console.log(
-		`    ${CYAN}yep serve${RESET}         ${DIM}Start MCP server (auto in Cursor)${RESET}`
-	);
-	console.log("");
+	cli.log("");
 }
 
 function detectProvider(): ProviderType {
@@ -340,11 +327,9 @@ function detectProvider(): ProviderType {
 }
 
 export async function enableCommand(): Promise<void> {
-	console.log("");
-	console.log(
-		`  ${BOLD}yep${RESET} ${DIM}— agent memory for your codebase${RESET}`
-	);
-	console.log("");
+	cli.log("");
+	cli.log(`  ${bold("yep")} ${dim("— agent memory for your codebase")}`);
+	cli.log("");
 
 	const repoRoot = await exec("git rev-parse --show-toplevel").then((r) => {
 		if (!r.ok) {
@@ -393,7 +378,7 @@ export async function enableCommand(): Promise<void> {
 	}
 
 	if (entire.ready && apiKey && (await checkpointBranchExists())) {
-		console.log("");
+		cli.log("");
 		info("Found existing checkpoints, syncing...");
 		try {
 			await runInitialSync();
@@ -404,7 +389,7 @@ export async function enableCommand(): Promise<void> {
 	}
 
 	if (apiKey || provider === "ollama") {
-		console.log("");
+		cli.log("");
 		info("Indexing code symbols...");
 		try {
 			const { runCodeIndex } = await import("./index-code.ts");

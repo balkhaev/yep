@@ -7,9 +7,7 @@ import type {
 } from "./types.ts";
 
 type CodeInsights = Awaited<
-	ReturnType<
-		typeof import("../mem/core/code-store.ts")["getCodeInsights"]
-	>
+	ReturnType<typeof import("../mem/core/code-store.ts")["getCodeInsights"]>
 >;
 
 type RecentSession = {
