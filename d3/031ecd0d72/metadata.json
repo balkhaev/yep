@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "d3031ecd0d72",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 7,
+  "files_touched": [
+    "apps/desktop/package.json",
+    "apps/desktop/src/components/Breadcrumbs.tsx",
+    "apps/desktop/src/components/DiffTimeline.tsx",
+    "apps/desktop/src/components/NavigationControls.tsx",
+    "apps/desktop/src/components/PageHeader.tsx",
+    "apps/desktop/src/components/SearchResult.tsx",
+    "apps/desktop/src/components/charts/theme.ts",
+    "apps/desktop/src/components/code/FileDetailPanel.tsx",
+    "apps/desktop/src/components/code/SymbolDetailPanel.tsx",
+    "apps/desktop/src/components/code/SymbolTypeBadge.tsx",
+    "apps/desktop/src/components/code/TabBar.tsx",
+    "apps/desktop/src/components/code/tabs/HistoryTab.tsx",
+    "apps/desktop/src/components/code/tabs/MetricsTab.tsx",
+    "apps/desktop/src/components/code/tabs/OverviewTab.tsx",
+    "apps/desktop/src/components/code/tabs/RelationsTab.tsx",
+    "apps/desktop/src/components/code/tabs/SourceTab.tsx",
+    "apps/desktop/src/hooks/useNavigationHistory.ts",
+    "apps/desktop/src/pages/Code.tsx",
+    "apps/desktop/src/pages/Dashboard.tsx",
+    "apps/desktop/src/pages/Insights.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d3/031ecd0d72/0/metadata.json",
+      "transcript": "/d3/031ecd0d72/0/full.jsonl",
+      "context": "/d3/031ecd0d72/0/context.md",
+      "content_hash": "/d3/031ecd0d72/0/content_hash.txt",
+      "prompt": "/d3/031ecd0d72/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 8221,
+    "cache_creation_tokens": 533833,
+    "cache_read_tokens": 13437629,
+    "output_tokens": 89145,
+    "api_call_count": 121
+  }
+}
