@@ -3,7 +3,7 @@
   "checkpoint_id": "d3031ecd0d72",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 47,
+  "checkpoints_count": 48,
   "files_touched": [
     "README.md",
     "apps/desktop/package.json",
@@ -43,6 +43,7 @@
     "apps/desktop/src/pages/Search.tsx",
     "apps/desktop/src/pages/Settings.tsx",
     "apps/tui/debug-rust-ast.ts",
+    "apps/tui/gui-dist/index.html",
     "apps/tui/package.json",
     "apps/tui/src/app.tsx",
     "apps/tui/src/mem/commands/api.ts",
@@ -157,6 +158,13 @@
       "context": "/d3/031ecd0d72/5/context.md",
       "content_hash": "/d3/031ecd0d72/5/content_hash.txt",
       "prompt": "/d3/031ecd0d72/5/prompt.txt"
+    },
+    {
+      "metadata": "/d3/031ecd0d72/6/metadata.json",
+      "transcript": "/d3/031ecd0d72/6/full.jsonl",
+      "context": "",
+      "content_hash": "/d3/031ecd0d72/6/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
