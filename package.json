@@ -41,7 +41,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.0",
+    "@biomejs/biome": "2.4.4",
     "@types/bun": "catalog:",
     "@yep/config": "workspace:*",
     "lefthook": "latest",
