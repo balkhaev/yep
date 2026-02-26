@@ -3,9 +3,10 @@
   "checkpoint_id": "d3031ecd0d72",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 9,
+  "checkpoints_count": 28,
   "files_touched": [
     "apps/desktop/package.json",
+    "apps/desktop/src/api.ts",
     "apps/desktop/src/components/Breadcrumbs.tsx",
     "apps/desktop/src/components/DiffTimeline.tsx",
     "apps/desktop/src/components/NavigationControls.tsx",
@@ -21,11 +22,15 @@
     "apps/desktop/src/components/code/tabs/OverviewTab.tsx",
     "apps/desktop/src/components/code/tabs/RelationsTab.tsx",
     "apps/desktop/src/components/code/tabs/SourceTab.tsx",
+    "apps/desktop/src/components/insights/TrendsTab.tsx",
     "apps/desktop/src/hooks/useNavigationHistory.ts",
     "apps/desktop/src/pages/Code.tsx",
     "apps/desktop/src/pages/Dashboard.tsx",
     "apps/desktop/src/pages/Insights.tsx",
-    "apps/tui/src/mem/commands/api.ts"
+    "apps/tui/src/mem/commands/api.ts",
+    "apps/tui/src/mem/commands/gui.ts",
+    "apps/tui/src/mem/core/code-store.ts",
+    "apps/tui/src/mem/core/trends.ts"
   ],
   "sessions": [
     {
@@ -41,13 +46,20 @@
       "context": "/d3/031ecd0d72/1/context.md",
       "content_hash": "/d3/031ecd0d72/1/content_hash.txt",
       "prompt": "/d3/031ecd0d72/1/prompt.txt"
+    },
+    {
+      "metadata": "/d3/031ecd0d72/2/metadata.json",
+      "transcript": "/d3/031ecd0d72/2/full.jsonl",
+      "context": "/d3/031ecd0d72/2/context.md",
+      "content_hash": "/d3/031ecd0d72/2/content_hash.txt",
+      "prompt": "/d3/031ecd0d72/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 14299,
-    "cache_creation_tokens": 605817,
-    "cache_read_tokens": 15329175,
-    "output_tokens": 96586,
-    "api_call_count": 150
+    "input_tokens": 16195,
+    "cache_creation_tokens": 1521124,
+    "cache_read_tokens": 35704084,
+    "output_tokens": 134488,
+    "api_call_count": 374
   }
 }

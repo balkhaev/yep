@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.4.5",
+  "checkpoint_id": "d3031ecd0d72",
+  "session_id": "80c85b5e-c4b7-470d-8140-63e8ae6a1255",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-26T10:09:08.749604Z",
+  "branch": "main",
+  "checkpoints_count": 19,
+  "files_touched": [
+    "apps/desktop/package.json",
+    "apps/desktop/src/api.ts",
+    "apps/desktop/src/components/charts/theme.ts",
+    "apps/desktop/src/components/insights/TrendsTab.tsx",
+    "apps/tui/src/mem/commands/api.ts",
+    "apps/tui/src/mem/commands/gui.ts",
+    "apps/tui/src/mem/core/code-store.ts",
+    "apps/tui/src/mem/core/trends.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "e4c87ccb6693",
+  "transcript_identifier_at_start": "cf9f69ce-bbf0-4a7f-aa40-196dc6fe1234",
+  "token_usage": {
+    "input_tokens": 1896,
+    "cache_creation_tokens": 915307,
+    "cache_read_tokens": 20374909,
+    "output_tokens": 37902,
+    "api_call_count": 224
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-26T10:09:08.370823Z",
+    "agent_lines": 986,
+    "human_added": 20721,
+    "human_modified": 5,
+    "human_removed": 0,
+    "total_committed": 21712,
+    "agent_percentage": 4.541267501842299
+  },
+  "transcript_path": ".claude/projects/-Users-balkhaev-mycode-yep/80c85b5e-c4b7-470d-8140-63e8ae6a1255.jsonl"
+}
