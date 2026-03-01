@@ -10,7 +10,7 @@
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {
-    "@ai-sdk/devtools": "^0.0.2",
+    "@ai-sdk/devtools": "^0.0.15",
     "@ai-sdk/google": "^3.0.1",
     "@yep/db": "workspace:*",
     "@yep/env": "workspace:*",
@@ -22,7 +22,7 @@
   "devDependencies": {
     "@types/bun": "catalog:",
     "@yep/config": "workspace:*",
-    "tsdown": "^0.16.5",
+    "tsdown": "^0.20.3",
     "typescript": "catalog:"
   }
 }
