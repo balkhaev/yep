@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",
-    "@lancedb/lancedb": "^0.16.0",
+    "@lancedb/lancedb": "^0.27.1",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@opentui/core": "^0.1.79",
     "@opentui/react": "^0.1.79",
@@ -51,12 +51,12 @@
     "hono": "^4.12.0",
     "ollama-ai-provider-v2": "^3.3.1",
     "react": "^19.2.4",
-    "tree-sitter": "^0.21.0",
-    "tree-sitter-typescript": "^0.21.0",
-    "tree-sitter-python": "^0.21.0",
-    "tree-sitter-go": "^0.21.0",
-    "tree-sitter-rust": "^0.21.0",
-    "tree-sitter-javascript": "^0.21.0",
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-typescript": "^0.23.2",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-go": "^0.25.0",
+    "tree-sitter-rust": "^0.24.0",
+    "tree-sitter-javascript": "^0.25.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
